@@ -1,0 +1,9 @@
+# Python >= 3.10 (PEP 604 unions in signatures)
+numpy>=1.26
+pandas>=2.0
+pyarrow>=14
+matplotlib>=3.8
+streamlit>=1.49
+pytest>=8          # offline unit tests only (tests/)
+# research probes only (scripts/appendix_c_statarb.py) additionally need:
+#   statsmodels

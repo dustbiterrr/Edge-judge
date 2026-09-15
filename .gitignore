@@ -1,0 +1,20 @@
+# never commit market data, models, or the RL stack
+data/
+*.parquet
+*.npy
+models/
+tb_logs/
+logs/
+# generated audit outputs: everything Quick start writes goes to out/
+out/
+report.md
+report.html
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+# secrets / local
+.env
+*.key

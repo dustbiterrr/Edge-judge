@@ -1,0 +1,219 @@
+"""
+checks.py — the five pre-registered criteria, v1.0.  FROZEN.
+
+These values come from the falsification campaign (2026-07) and are not
+configurable from the UI or CLI.  The only external input is the fee profile
+(a property of the user's exchange).  All checks run on the NON-OVERLAPPING
+trade set (one position per symbol at a time) — the S02 lesson.
+
+  C1 SAMPLE     >= 100 non-overlapping trades
+  C2 FEES       mean net PnL per trade > 0 after the fee round-trip
+  C3 RW-NEUTRAL total net PnL above the 97.5th percentile of 1000
+                direction-randomized bootstraps (does choosing the side
+                beat a coin flip, fees included)
+  C4 STABILITY  50/50 time split: mean net same sign in both halves AND
+                second half > 0 (regime artifacts fail here)
+  C5 REGIME     of market regimes (UP/DOWN/FLAT by 24h drift at entry,
+                +-1.5% threshold) holding >= 10 trades, >= 60% must be
+                net-positive, and at least one regime must qualify
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import numpy as np
+import pandas as pd
+
+from judge.marketdata import drift_24h_at, ensure_klines, next_bar_open
+from judge.overlap import resolve_overlaps
+
+CRITERIA_VERSION = "1.0.1"
+MIN_TRADES = 100
+BOOT_N = 1000
+BOOT_PCTL = 97.5
+REGIME_DRIFT = 0.015
+REGIME_MIN_TRADES = 10
+REGIME_POS_FRAC = 0.60
+RNG_SEED = 20260706          # fixed: identical verdict on identical input
+
+
+@dataclass
+class CheckResult:
+    code: str
+    name: str
+    passed: bool
+    key_number: str
+    detail: str
+
+
+@dataclass
+class AuditResult:
+    verdict: str                       # "PASS" | "FAIL"
+    checks: list[CheckResult]
+    n_trades: int
+    n_dropped_overlap: int
+    reconstructed: bool
+    fee_rt: float
+    criteria_version: str = CRITERIA_VERSION
+    warnings: list[str] = field(default_factory=list)
+    # chart artifacts
+    trades: pd.DataFrame | None = None          # resolved set with net_pct
+    bootstrap_totals: np.ndarray | None = None
+    client_total: float = 0.0
+    client_pctl: float = 0.0
+    half_means: tuple[float, float] = (0.0, 0.0)
+    regime_table: pd.DataFrame | None = None
+
+
+def audit(trades: pd.DataFrame, fee_rt: float,
+          progress=None) -> AuditResult:
+    """fee_rt = round-trip fee in % of notional (e.g. 0.11)."""
+    def step(msg):
+        if progress:
+            progress(msg)
+
+    warnings: list[str] = []
+
+    step("resolving overlaps (one position per symbol at a time)")
+    tr, dropped = resolve_overlaps(trades)
+    if dropped:
+        warnings.append(f"{dropped} overlapping trades dropped "
+                        f"(one-position-at-a-time rule).")
+
+    step("loading market data")
+    klines: dict[str, pd.DataFrame] = {}
+    for sym in tr["symbol"].unique():
+        g = tr[tr["symbol"] == sym]
+        t0 = int(g["entry_time"].min().timestamp() * 1000)
+        t1 = int(g["exit_time"].max().timestamp() * 1000)
+        klines[sym] = ensure_klines(sym, t0, t1, progress=progress)
+
+    step("pricing trades")
+    reconstructed = False
+    n_partial = 0
+    n_gapped = 0
+    ep = tr["entry_price"].to_numpy(dtype=float, copy=True)
+    xp = tr["exit_price"].to_numpy(dtype=float, copy=True)
+    for i, row in tr.iterrows():
+        e_nan, x_nan = np.isnan(ep[i]), np.isnan(xp[i])
+        if not (e_nan or x_nan):
+            continue
+        # reconstruct ONLY the missing side; a provided price is user data
+        # and is never silently overwritten
+        kl = klines[row["symbol"]]
+        if e_nan:
+            ep[i], g = next_bar_open(kl, int(row["entry_time"].timestamp()
+                                             * 1000))
+            n_gapped += int(g)
+        if x_nan:
+            xp[i], g = next_bar_open(kl, int(row["exit_time"].timestamp()
+                                             * 1000))
+            n_gapped += int(g)
+        reconstructed = True
+        n_partial += int(e_nan != x_nan)
+    ok = ~(np.isnan(ep) | np.isnan(xp)) & (ep > 0)
+    if (~ok).any():
+        warnings.append(f"{int((~ok).sum())} trades could not be priced "
+                        f"(outside available market data) and were dropped.")
+        tr = tr[ok].reset_index(drop=True)
+        ep, xp = ep[ok], xp[ok]
+    if reconstructed:
+        warnings.append("prices reconstructed from market data "
+                        "(next 1h bar open after each timestamp).")
+    if n_partial:
+        warnings.append(f"{n_partial} rows had a price for one side only — "
+                        f"the provided price was kept, only the missing side "
+                        f"was reconstructed.")
+    if n_gapped:
+        warnings.append(f"{n_gapped} reconstructed prices fall more than one "
+                        f"bar after their timestamp (hole in market data) — "
+                        f"treat those trades' pricing as approximate.")
+
+    side = tr["side"].to_numpy(dtype=float)
+    gross = side * (xp / ep - 1.0) * 100.0
+    net = gross - fee_rt
+    tr = tr.assign(gross_pct=gross, net_pct=net,
+                   entry_px_used=ep, exit_px_used=xp)
+
+    checks: list[CheckResult] = []
+    n = len(tr)
+
+    step("check 1/5: sample size")
+    c1 = n >= MIN_TRADES
+    checks.append(CheckResult(
+        "C1", "Sample size", c1, f"{n} trades",
+        f"{n} non-overlapping trades (bar: >= {MIN_TRADES}). "
+        + ("" if c1 else "Too few trades for any of the following numbers "
+                         "to be trusted.")))
+
+    step("check 2/5: fee survival")
+    mean_net = float(net.mean()) if n else float("nan")
+    c2 = n > 0 and mean_net > 0
+    checks.append(CheckResult(
+        "C2", "Fee survival", c2, f"{mean_net:+.3f}%/trade",
+        f"Mean net PnL {mean_net:+.3f}%/trade after a {fee_rt:.3f}% "
+        f"round-trip fee (bar: > 0)."))
+
+    step("check 3/5: random-walk neutrality (1000 bootstraps)")
+    rng = np.random.default_rng(RNG_SEED)
+    signs = rng.choice([-1.0, 1.0], size=(BOOT_N, n))
+    boot_totals = (signs * gross[None, :] - fee_rt).sum(axis=1)
+    client_total = float(net.sum())
+    pctl = float((boot_totals < client_total).mean() * 100.0)
+    c3 = pctl >= BOOT_PCTL
+    checks.append(CheckResult(
+        "C3", "Beats coin-flip", c3, f"{pctl:.1f}th pctl",
+        f"Total net {client_total:+.2f}% sits at the {pctl:.1f}th percentile "
+        f"of {BOOT_N} direction-randomized logs (bar: >= {BOOT_PCTL}). "
+        + ("" if c3 else "Flipping a coin for direction does as well.")))
+
+    step("check 4/5: stability across halves")
+    mid_time = tr["entry_time"].min() + (tr["entry_time"].max()
+                                         - tr["entry_time"].min()) / 2
+    first = tr[tr["entry_time"] <= mid_time]["net_pct"]
+    second = tr[tr["entry_time"] > mid_time]["net_pct"]
+    m1 = float(first.mean()) if len(first) else float("nan")
+    m2 = float(second.mean()) if len(second) else float("nan")
+    c4 = (len(first) > 0 and len(second) > 0 and np.isfinite(m1)
+          and np.isfinite(m2) and np.sign(m1) == np.sign(m2) and m2 > 0)
+    checks.append(CheckResult(
+        "C4", "Stability (half vs half)", c4, f"{m1:+.3f}% / {m2:+.3f}%",
+        f"Mean net first half {m1:+.3f}%, second half {m2:+.3f}% "
+        f"(bar: same sign, second half > 0). "
+        + ("" if c4 else "A sign flip between halves is the signature of a "
+                         "regime artifact, not an edge.")))
+
+    step("check 5/5: regime robustness")
+    regimes = []
+    for _, row in tr.iterrows():
+        d = drift_24h_at(klines[row["symbol"]],
+                         int(row["entry_time"].timestamp() * 1000))
+        regimes.append("UP" if d > REGIME_DRIFT
+                       else "DOWN" if d < -REGIME_DRIFT
+                       else "FLAT" if np.isfinite(d) else "NA")
+    tr = tr.assign(regime=regimes)
+    rt = (tr[tr["regime"] != "NA"].groupby("regime")["net_pct"]
+          .agg(["count", "mean", "sum"]).reset_index())
+    qual = rt[rt["count"] >= REGIME_MIN_TRADES]
+    if len(qual) == 0:
+        c5 = False
+        key5 = "no qualifying regime"
+        det5 = (f"No market regime holds >= {REGIME_MIN_TRADES} trades — "
+                "cannot demonstrate robustness.")
+    else:
+        pos = int((qual["sum"] > 0).sum())
+        c5 = pos / len(qual) >= REGIME_POS_FRAC
+        key5 = f"{pos}/{len(qual)} regimes +"
+        det5 = (f"{pos} of {len(qual)} qualifying regimes are net-positive "
+                f"(bar: >= {REGIME_POS_FRAC:.0%}). Regimes = UP/DOWN/FLAT by "
+                f"24h market drift at entry (+-{REGIME_DRIFT:.1%}).")
+    checks.append(CheckResult("C5", "Regime robustness", c5, key5, det5))
+
+    verdict = "PASS" if all(c.passed for c in checks) else "FAIL"
+    return AuditResult(
+        verdict=verdict, checks=checks, n_trades=n,
+        n_dropped_overlap=dropped, reconstructed=reconstructed,
+        fee_rt=fee_rt, warnings=warnings, trades=tr,
+        bootstrap_totals=boot_totals, client_total=client_total,
+        client_pctl=pctl, half_means=(m1, m2), regime_table=rt)
