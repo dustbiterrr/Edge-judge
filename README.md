@@ -23,16 +23,16 @@ script lists every one of them.
 
 | Stage | Hypothesis | Verdict |
 |---|---|---|
-| RL diagnostics (1m) | Entries carry signal | **Adverse** - entry win-rate 7–19pp *below* the random-walk-neutral benchmark |
-| Offline price probe (1m) | Price momentum predicts | Coin-flip; expectancy ≈ −0.11%/trade = exactly the round-trip fee |
-| Native 15m/1h probe | 5 generic signal families (price, flow, divergence, MTF, OI/funding) | 0 cells past the pre-registered +0.22% OUT threshold |
-| Setup library | 13 codified setups × 10 evaluable symbols × 2 TF × 3 horizons = 780 cells (11-symbol basket, INJUSDT excluded by data validation; ADA/XRP/DOT held out for confirmation) | 5 passes vs ~1.25 expected false - first real excess of the campaign |
-| Confirmation (untouched symbols) | 3 surviving setups | 2 killed (S01, S08); S02 vwap-fade survives 2/3 |
-| **Non-overlap judge** | S02 vwap-fade, one-position-at-a-time | (a),(b),(c) PASS - but **(d) FAIL: IN-half −0.33%/trade vs OUT +0.24%.** Sign flip between halves = regime artifact, not edge. Not tradable. |
-| Funding/basis carry | Structural premium beats costs | **No premium in window** - basket avg funding ≈ 0 across H1-2026 (39–56% of payments negative); best symbol +3.1%/yr on deployed vs the pre-registered 8% bar; all three harvest strategies negative after costs (−0.8% to −56%/yr). On $10k deployed: **−$5 to −$7/month.** Regime-dependent: monitored, not traded. |
-| Appendix B (pre-declared final wave) | 6 advanced setups (funding-frontrun, OI-spring, CVD-exhaustion, toxic-flow, FVG, liquidation-cascade) + cross-sectional relative value (S20) | Only **S14 reached tradable sample** → **dead, 0/7 symbols net-positive** (best −0.04%). The other five never cleared the n-guard: S15/S18/S19 too rare by construction, S17 near-zero signals at these bar sizes, **S16 guard-blocked on the same IN/OUT sign-flip that killed S02 - caught *before* judgment.** **S20: both rankers sign-flipped between halves** (momentum IN −0.30% → OUT +0.43%; flow the exact mirror). 0 confirmations. |
+| RL diagnostics (1m) † | Entries carry signal | **Adverse** - entry win-rate 7–19pp *below* the random-walk-neutral benchmark. From the RL repository's diagnostics; no artifact in this one. |
+| Offline price probe (1m) † | Price momentum predicts | Coin-flip; expectancy ≈ −0.11%/trade = exactly the round-trip fee. Console output of a probe not shipped here. |
+| Native 15m/1h probe † | 5 generic signal families (price, flow, divergence, MTF, OI/funding), ~90 cells | 0 cells past the pre-registered +0.22% OUT threshold. `native_tf_edge_probe.py` prints and writes no CSV; the ~90 cells are not in `results/`. |
+| Setup library ✓ | 13 codified setups × 10 evaluable symbols × 2 TF × 3 horizons = 780 cells (11-symbol basket, INJUSDT excluded by data validation; ADA/XRP/DOT held out for confirmation) | **5 passes** (S01 ×2, S02 ×2, S08 ×1, all 1h H=16) vs ~1.25 expected false as printed at run time† - the proxy in `campaign_numbers.py` gives ~2.4 at nominal n and ~12 once per-bar overlap is discounted. First excess of the campaign, of uncertain size. |
+| Confirmation (untouched symbols) ✓ | the 3 surviving setups on ADA/XRP/DOT | S01 and S08: no cell passes. S02 vwap-fade: OUT positive on 2 of 3 symbols (XRP marginal +0.05%, DOT +0.96% with IN −0.13%, a sign flip), no cell passes the bar. **Also on the untouched symbols: S04 liq-bounce passes on DOTUSDT at 15m H=8 and H=16** - a setup that did not survive screening, passing on confirmation data; by protocol that is screening on the confirmation set, not a confirmation, and it was not pursued. Earlier versions of this README did not mention it. |
+| **Non-overlap judge** ✓ | S02 vwap-fade, one-position-at-a-time | (a),(b),(c) PASS at both horizons - but **(d) FAIL: median IN −0.33%/trade vs OUT +0.33% (H=8); −0.32% vs +0.22% (H=16).** Sign flip between halves = regime artifact, not edge. Not tradable. |
+| Funding/basis carry ✓ | Structural premium beats costs | **No premium in window.** All three harvest strategies negative after costs on the OUT half at taker (S-A −0.8%, S-B −8.7%, S-C −56%/yr on deployed); the best single symbol is LINKUSDT at +2.3%/yr maker, +2.1% taker, against the pre-registered 8% bar. S-A on $10k deployed: **−$5 (maker) to −$7 (taker) per month.** Basket average funding ≈ 0 and 39–56% of payments negative are run-time prints†. Regime-dependent: monitored, not traded. |
+| Appendix B (pre-declared final wave) ✓ | 6 advanced setups (funding-frontrun, OI-spring, CVD-exhaustion, toxic-flow, FVG, liquidation-cascade) + cross-sectional relative value (S20) | Only **S14 reached tradable sample** → **dead, 0 of 14 evaluable cells (7 symbols × 2 H) net-positive**. The other five never reached the n-guard of 100 OUT trades: S17 produced zero signals at these bar sizes, S15/S19 at most 8/13, S18 at most 26, S16 at most 53 - the run-time diagnostic that called S16 "guard-blocked on a sign flip" is not in the CSV†. **S20: all four configs sign-flipped between halves** (momentum_k1 IN −0.30% → OUT +0.43%, flow_z_k1 IN +0.04% → OUT −0.30%). 0 confirmations. |
 
-The last row is the whole point. A per-bar backtest showed +0.63% on the best cell. Honest one-position execution plus one pre-registered criterion - *sign agreement between halves* - revealed the "edge" was April–July weather. That single line of protocol is the difference between a research note and a drawdown.
+The non-overlap row is the whole point. The per-bar screen showed +0.63% on the best S02 cell†. Honest one-position execution plus one pre-registered criterion - *sign agreement between halves* - revealed the "edge" was April–July weather. That single line of protocol is the difference between a research note and a drawdown.
 
 **Final state: on 1m–1h bar data for these 13 instruments in H1-2026, nothing beats the commission.** Closing arithmetic for H1-2026: **1,201 unique cells with a CSV in `results/`** - 780 setup-library + 234 untouched-symbol confirmation + 156 appendix B + 4 relative-value configs + 27 funding-carry strategy×symbol cells (`python scripts/count_cells.py`) - plus ~90 generic-probe cells that were printed and never written to CSV†. The false-pass ledger the probes printed at run time summed to ~1.4†; the CSVs do not carry the per-trade sigma it needs, so it cannot be recomputed here. **Confirmed edges: 0** - a result consistent with an honest search of a dead space, which is what validates the instrument. Directional prediction is dead everywhere we looked; the structural premium was absent in this window (regime-dependent - we monitor the funding rate, we don't trade it). What survives is the judge itself - and the map of where not to dig.
 
@@ -172,10 +172,11 @@ table, three charts (coin-flip bootstrap, non-overlap equity with IN/OUT
 halves, PnL by market regime), and downloadable md/html reports. The
 **"Try the demo verdict"** button audits our own S02 trade log, so a visitor
 sees a real FAIL on a real strategy in ~30 seconds without uploading
-anything. Release acceptance (a 15-check suite, including byte-identical
-numbers between the demo button and the CLI on the same input) runs in the
-development repo before each release; this repository ships the offline
-unit tests in `tests/` (`pytest -q tests`).
+anything. What this repository can prove about itself is in `tests/`
+(`pytest -q tests`, offline, network disabled at the socket level): the fee arithmetic, date and
+timestamp ingest, overlap resolution, C3/C4/C5 boundary behaviour, all
+three C6 states, and a regression test that pins the self-test numbers
+quoted above to the code and to this README.
 
 ## What this is not
 
