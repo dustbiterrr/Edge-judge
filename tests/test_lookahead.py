@@ -70,6 +70,7 @@ def test_unverifiable_is_named_in_verdict_line_summary_and_notes(offline_klines)
     text = what_this_means(res)
     assert "could NOT be checked" in text
     assert "coin flip does not explain" not in text  # no clean endorsement
+    assert "What it does not mean" in text            # PASS_MEANS is attached
     assert any("C6 look-ahead UNVERIFIABLE" in w for w in res.warnings)
     md = to_markdown(res)
     assert "| C6 | Look-ahead | **UNVERIFIABLE** |" in md
@@ -104,7 +105,9 @@ def test_signal_one_bar_before_entry_passes(offline_klines):
     assert c.status == "PASS" and c.passed and c.key_number == "0/120 trades"
     assert res.verdict == "PASS" and res.unverifiable == []
     assert verdict_line(res).startswith("PASS — all 6 checks passed")
-    assert what_this_means(res).startswith("All six pre-registered checks passed")
+    text = what_this_means(res)
+    assert text.startswith("All six pre-registered checks passed")
+    assert "What it does not mean" in text            # PASS_MEANS is attached
 
 
 def test_signal_mid_bar_and_entry_at_next_bar_open_passes(offline_klines):

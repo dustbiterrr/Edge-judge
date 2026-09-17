@@ -94,6 +94,22 @@ PASS_PARTIAL = ("The five statistical checks passed, but the one check that "
                 "would catch look-ahead could not run, so this is not a clean "
                 "verdict.")
 
+# Printed under every PASS - CLI, reports, web app.  The first question a
+# reader asks under a PASS is "so I have an edge?"; this is the answer.
+PASS_MEANS = (
+    "What a PASS means: on the trades in this log, after the fee named "
+    "above, your side choices beat a coin flip at the 2.5% level, the result "
+    "held in both halves of the period, it was not carried by one regime, "
+    "and - if C6 ran - entries were booked after their signals. What it does "
+    "not mean: that the strategy was pre-registered, that these trades are "
+    "out-of-sample, that your costs are right, that this was not the best of "
+    "many variants you tried, that the data behind the signals existed when "
+    "they fired, that the signal_time column is truthful, or that it will "
+    "work next month. Read it together with the scope list in the README "
+    "(\"What this is not\") and with the state of C6: a PASS with C6 "
+    "UNVERIFIABLE holds only if the timing was honest, and the judge could "
+    "not check the timing.")
+
 
 def what_this_means(res) -> str:
     failed = [c.code for c in res.checks if c.status == "FAIL"]
@@ -101,8 +117,8 @@ def what_this_means(res) -> str:
            for c in res.unverifiable]
     if not failed:
         if not unv:
-            return PASS_VERIFIED
-        return " ".join([PASS_PARTIAL] + unv)
+            return " ".join([PASS_VERIFIED, PASS_MEANS])
+        return " ".join([PASS_PARTIAL] + unv + [PASS_MEANS])
     return " ".join([INTERPRET[c] for c in failed[:3]] + unv)
 
 

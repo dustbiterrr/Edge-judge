@@ -21,9 +21,9 @@ from judge import FEE_PROFILES
 from judge.checks import CRITERIA_VERSION, audit
 from judge.ingest import TEMPLATE_CSV, IngestError, load_trades
 from judge.marketdata import MarketDataError
-from judge.report import (FAIL_RED, PASS_GREEN, chart_bootstrap, chart_equity,
-                          chart_regimes, to_html, to_markdown, verdict_line,
-                          what_this_means)
+from judge.report import (FAIL_RED, PASS_GREEN, PASS_MEANS, chart_bootstrap,
+                          chart_equity, chart_regimes, to_html, to_markdown,
+                          verdict_line, what_this_means)
 
 DEMO_LOG = Path("results/s02_trades_LINKUSDT_16.csv")
 DEMO_SYMBOL = "LINKUSDT"
@@ -108,6 +108,8 @@ def show_verdict(res):
     for c in res.unverifiable:
         st.warning(f"{c.code} {c.name}: UNVERIFIABLE ({c.key_number}). "
                    f"{c.detail}")
+    if res.verdict == "PASS":
+        st.info(PASS_MEANS)
 
     rows = []
     for c in res.checks:

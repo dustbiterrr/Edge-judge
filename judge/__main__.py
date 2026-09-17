@@ -14,7 +14,7 @@ from judge import FEE_PROFILES
 from judge.checks import audit
 from judge.ingest import IngestError, load_trades
 from judge.marketdata import MarketDataError
-from judge.report import to_html, to_markdown, verdict_line
+from judge.report import PASS_MEANS, to_html, to_markdown, verdict_line
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -83,6 +83,11 @@ def main() -> int:
             print(f"      {res.cost_note}")
         if c.status == "UNVERIFIABLE":
             print(f"      {c.detail}")
+    if res.verdict == "PASS":
+        import textwrap
+        print()
+        print(textwrap.fill(PASS_MEANS, width=96, initial_indent="  ",
+                            subsequent_indent="  "))
     print(f"report -> {out}")
     return 0 if res.verdict == "PASS" else 1
 
