@@ -14,10 +14,12 @@ Retail backtests fail their authors in repeatable ways: thresholds tuned on the 
 
 ## What the judge caught (case study)
 
-We ran the full protocol against one system's worth of hypotheses. A number
-marked † was printed by a probe at run time and never written to a CSV: it is
-quoted from the run and is **not reproducible from this repository**. Cell
-counts reproduce with `python scripts/count_cells.py`.
+We ran the full protocol against one system's worth of hypotheses. Every number
+below is one of two kinds. **✓** reproduces from `results/` with one command,
+`python scripts/campaign_numbers.py` (cells: `python scripts/count_cells.py`).
+**†** was printed by a probe at run time and never written to a CSV: it is
+quoted from the run and is **not reproducible from this repository**; the
+script lists every one of them.
 
 | Stage | Hypothesis | Verdict |
 |---|---|---|
@@ -36,11 +38,11 @@ The last row is the whole point. A per-bar backtest showed +0.63% on the best ce
 
 **Extended-window re-run (18.2 months, 2025-01 → 2026-07-06).** 1,174 of the H1 cells were re-tested on the long window - all 1,014 S01–S13 cells including the untouched symbols, all 156 S14–S19 cells, the 4 S20 configs - and 69 structural cells (S21–S23) were added: **1,270 unique cells campaign-wide** (`python scripts/count_cells.py`; the earlier "~2,500 cumulative" counted the re-tests as new cells). The split is a hard bull→bear cut (IN drift −11% / funding +0.35bp → OUT drift −71% / funding −0.19bp†, the most adversarial regime cut available):
 
-- **Directional (S01–S19): death confirmed, tighter.** Pooled OUT expectancy **−0.091%/trade, 95% CI [−0.101, −0.082]** - the interval now excludes zero. Doubling the sample narrowed the confidence bound instead of revealing an edge, exactly as pre-registered.
-- **Structural classes, tested at power for the first time:** relative-value (S20) upgraded from *insufficient* to **falsified** (274 cycles, best +0.035% ≪ +0.44% bar); cointegration (S22) - 4 pairs reached sample, all **FAIL**; weekend-vacuum (S23) still under-powered (needs ~5-year window - the one honestly-undertested door).
-- **One mechanism, every level.** S20 and all four evaluable S22 cells died by the *same* IN+ → OUT− sign flip that killed S02: mean-reversion and spread strategies that worked in the bullish first half broke in the bearish second. The campaign didn't just find zero - it measured *why*: patterns that work in one regime don't survive the regime change.
+- **Directional (S01–S19): the population is dead; 13 individual cells pass and none was confirmed.** Pooled OUT expectancy over the 1,012 evaluable cells is **−0.091%/trade, 95% CI [−0.101, −0.082]** ✓ - the interval excludes zero, and tripling the sample tightened it instead of revealing an edge. But 13 cells clear the pre-registered per-cell bar ✓: S06 breakout-cont ×6 (OPUSDT at H=4, 8 *and* 16 - one signal counted at three horizons - SUIUSDT ×2, NEARUSDT), S02 vwap-fade ×4 (AVAX, DOGE, LINK, SUI, all 1h H=16), S16 cvd-exhaustion ×2 (APT, DOT), S05 range-fade ×1 (ADA). An earlier version of this README said "death confirmed" and did not mention them. **How many should pass by luck is not settled by the data in this repository.** The probes' run-time false-pass ledger was never saved†; a proxy calibrated on the S02 trade logs (`campaign_numbers.py`, section H, assumptions stated there) gives **~5.3 expected at nominal trade counts - 13 would be a 2.4× excess (Poisson p ≈ 0.005 for the 11 S01–S13 cells)** - but S01–S13 counts are overlapping per-bar signals, and at the campaign's own measured episode length of 3.9 bars the expectation rises to **~23, with the 11 observed sitting below the noise floor**. The per-bar screen cannot tell those two readings apart; only the non-overlap judge can, and it was not run on the extended window. S02 vwap-fade is the setup that failed exactly that judge in H1. The S14–S19 cells are non-overlapping by construction: 2 passes against ~1.1 expected, p ≈ 0.30, noise. **Status of the 13: unconfirmed candidates.** By the campaign's own rule 5 they are not edges until they survive one-position execution and untouched data, and neither was done.
+- **Structural classes, at power for the first time ✓:** relative value (S20): 274 OUT cycles per config, best OUT **+0.035%/cycle against the +0.44% bar - falsified**; the two momentum rankers flipped IN− → OUT+, flow_z_k1 flipped IN+ → OUT−, flow_z_k2 was negative in both halves. Cointegration (S22): 30 pair-cells, 4 reached the n-guard - **3 dead, 1 marginal** (OPU/DOT +0.036%/cycle, far under the bar), and their IN halves hold 1–4 cycles, too few to call a sign flip either way. Weekend-vacuum (S23): 26 cells, all insufficient - it needs a ~5-year window and remains the one honestly-untested door. S21 control: 13 cells, all insufficient, as pre-declared.
+- **The mechanism that killed S02 recurs, but not everywhere.** Sign disagreement between halves - a pattern that works in one regime and breaks in the next - shows up in all four H1 S20 configs and three of four extended ones. It is *not* what the 13 directional candidates show: they pass with the same sign in both halves, which is exactly why they need the non-overlap judge rather than a paragraph.
 
-Zero confirmed edges across 1,270 unique cells, 1,174 of them tested through two market regimes. That is not fatigue - it is a result.
+Zero confirmed edges across 1,270 unique cells, 1,174 of them tested through two market regimes; 13 per-bar candidates the screen cannot resolve are listed above, unconfirmed. That is the result, with its remainder stated.
 
 ## Repository layout
 
