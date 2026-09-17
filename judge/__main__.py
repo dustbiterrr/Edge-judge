@@ -75,8 +75,9 @@ def main() -> int:
               "available market data; nothing to judge.")
     print(verdict_line(res))
     for c in res.checks:
-        print(f"  {c.code} {'PASS' if c.passed else 'FAIL':<4} "
-              f"{c.name:<28} {c.key_number}")
+        print(f"  {c.code} {c.status:<12} {c.name:<28} {c.key_number}")
+        if c.status == "UNVERIFIABLE":
+            print(f"      {c.detail}")
     print(f"report -> {out}")
     return 0 if res.verdict == "PASS" else 1
 

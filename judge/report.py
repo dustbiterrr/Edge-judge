@@ -20,19 +20,41 @@ from matplotlib.figure import Figure
 
 PASS_GREEN = "#2E6B4F"
 FAIL_RED = "#B3402E"
+UNVERIFIABLE_AMBER = "#8A6D1F"
 
-V101_NOTE = ("v1.0.1 fixes a regime-lookup lookahead affecting mid-bar "
-             "entries; verdicts on bar-aligned logs are unchanged.")
+VERSION_NOTES = ("v1.1.0 adds C6 look-ahead (signal_time vs entry_time); "
+                 "without a signal_time column C6 is reported UNVERIFIABLE, "
+                 "never passed. C1-C5 unchanged since v1.0; v1.0.1 fixed a "
+                 "regime-lookup lookahead affecting mid-bar entries.")
+V101_NOTE = VERSION_NOTES          # kept for callers of the old name
+
+BADGE_COLOR = {"PASS": PASS_GREEN, "FAIL": FAIL_RED,
+               "UNVERIFIABLE": UNVERIFIABLE_AMBER}
+
+
+def _unverifiable_tail(res) -> str:
+    unv = res.unverifiable
+    if not unv:
+        return ""
+    return "; " + ", ".join(f"{c.code} {c.name.lower()} UNVERIFIABLE "
+                            f"({c.key_number})" for c in unv)
 
 
 def verdict_line(res) -> str:
+    """One line that never hides an unverifiable check behind a PASS."""
+    evald = res.evaluated
+    tail = _unverifiable_tail(res)
     if res.verdict == "PASS":
-        return (f"PASS — all 5 checks passed on {res.n_trades} trades "
-                f"(criteria v{res.criteria_version}).")
-    failed = [c for c in res.checks if not c.passed]
-    return (f"FAIL — {len(failed)} of 5 checks failed "
+        if tail:
+            return (f"PASS — {len(evald)} of {len(evald)} evaluated checks "
+                    f"passed on {res.n_trades} trades{tail} "
+                    f"(criteria v{res.criteria_version}).")
+        return (f"PASS — all {len(evald)} checks passed on {res.n_trades} "
+                f"trades (criteria v{res.criteria_version}).")
+    failed = [c for c in evald if c.status == "FAIL"]
+    return (f"FAIL — {len(failed)} of {len(evald)} checks failed "
             f"({failed[0].code} {failed[0].name.lower()}: "
-            f"{failed[0].key_number}).")
+            f"{failed[0].key_number}){tail}.")
 
 
 INTERPRET = {
@@ -47,18 +69,41 @@ INTERPRET = {
           "not an edge.",
     "C5": "Profits are concentrated in one market regime. When that regime "
           "ends, the strategy has nothing.",
+    "C6": "Entries are logged at or before the moment their signal could "
+          "have been known. That is look-ahead: the backtest traded on "
+          "information it did not yet have, and every other number in this "
+          "report inherits it. Fix the entry timing before reading anything "
+          "else.",
 }
+
+UNVERIFIABLE_TEXT = {
+    "C6": "Look-ahead could NOT be checked: the log has no signal_time "
+          "column, so the judge cannot tell whether entries used information "
+          "from the bar they were booked on. A look-ahead-biased log passes "
+          "all five statistical checks. Add a signal_time (decision time) "
+          "column and re-run before trusting this verdict.",
+}
+
+PASS_VERIFIED = ("All six pre-registered checks passed. This does not "
+                 "guarantee future profits, but the log shows a fee-surviving, "
+                 "direction-informed, regime-robust pattern that a coin flip "
+                 "does not explain, with entries timed after their signals. "
+                 "Forward-test with small size before trusting it.")
+
+PASS_PARTIAL = ("The five statistical checks passed, but the one check that "
+                "would catch look-ahead could not run, so this is not a clean "
+                "verdict.")
 
 
 def what_this_means(res) -> str:
-    failed = [c.code for c in res.checks if not c.passed]
+    failed = [c.code for c in res.checks if c.status == "FAIL"]
+    unv = [UNVERIFIABLE_TEXT.get(c.code, f"{c.code} could not be checked.")
+           for c in res.unverifiable]
     if not failed:
-        return ("All five pre-registered checks passed. This does not "
-                "guarantee future profits, but the log shows a fee-surviving, "
-                "direction-informed, regime-robust pattern that a coin flip "
-                "does not explain. Forward-test with small size before "
-                "trusting it.")
-    return " ".join(INTERPRET[c] for c in failed[:3])
+        if not unv:
+            return PASS_VERIFIED
+        return " ".join([PASS_PARTIAL] + unv)
+    return " ".join([INTERPRET[c] for c in failed[:3]] + unv)
 
 
 # ── charts (matplotlib -> PNG bytes; identical in app and HTML report) ──────
@@ -149,7 +194,7 @@ def chart_regimes(res) -> bytes:
 def _criteria_rows(res) -> str:
     rows = []
     for c in res.checks:
-        badge = "PASS" if c.passed else "FAIL"
+        badge = c.status
         rows.append(f"| {c.code} | {c.name} | **{badge}** | {c.key_number} | "
                     f"{c.detail} |")
     return "\n".join(rows)
@@ -178,7 +223,7 @@ def to_markdown(res) -> str:
 criteria v{res.criteria_version} (pre-registered, not user-configurable) ·
 fee round-trip {res.fee_rt:.3f}% · {res.n_trades} non-overlapping trades ·
 generated {ts} · not financial advice · methodology: README
-{V101_NOTE}
+{VERSION_NOTES}
 """
 
 
@@ -192,7 +237,7 @@ def to_html(res) -> str:
                  f'style="max-width:100%;margin:12px 0"/>\n')
     rows = ""
     for c in res.checks:
-        b = ("PASS", PASS_GREEN) if c.passed else ("FAIL", FAIL_RED)
+        b = (c.status, BADGE_COLOR[c.status])
         rows += (f"<tr><td>{c.code}</td><td>{c.name}</td>"
                  f"<td style='color:{b[1]};font-weight:700'>{b[0]}</td>"
                  f"<td class='mono'>{c.key_number}</td>"
@@ -218,5 +263,5 @@ footer{{font-size:12px;color:#777;margin-top:24px}}
 <footer>criteria v{res.criteria_version} (pre-registered, not user-configurable)
 · fee RT {res.fee_rt:.3f}% · {res.n_trades} non-overlapping trades ·
 generated {ts} · not financial advice · methodology: README<br>
-{V101_NOTE}</footer>
+{VERSION_NOTES}</footer>
 </body></html>"""

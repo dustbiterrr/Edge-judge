@@ -1,10 +1,11 @@
 """
-checks.py — the five pre-registered criteria, v1.0.  FROZEN.
+checks.py — the pre-registered criteria, v1.1.0.
 
-These values come from the falsification campaign (2026-07) and are not
-configurable from the UI or CLI.  The only external input is the fee profile
-(a property of the user's exchange).  All checks run on the NON-OVERLAPPING
-trade set (one position per symbol at a time) — the S02 lesson.
+C1–C5 are FROZEN since v1.0: the values come from the falsification
+campaign (2026-07) and are not configurable from the UI or CLI.  C6 was
+added in v1.1.0.  The only external input is the fee profile (a property
+of the user's exchange).  All checks run on the NON-OVERLAPPING trade set
+(one position per symbol at a time) — the S02 lesson.
 
   C1 SAMPLE     >= 100 non-overlapping trades
   C2 FEES       mean net PnL per trade > 0 after the fee round-trip
@@ -16,6 +17,15 @@ trade set (one position per symbol at a time) — the S02 lesson.
   C5 REGIME     of market regimes (UP/DOWN/FLAT by 24h drift at entry,
                 +-1.5% threshold) holding >= 10 trades, >= 60% must be
                 net-positive, and at least one regime must qualify
+  C6 LOOK-AHEAD every entry is booked strictly after its signal_time AND
+                outside the signal's own 1h bar (an entry at the open of a
+                later bar is clean).  Needs a signal_time column.  Without
+                one the check is UNVERIFIABLE — reported as such in the
+                verdict line, the summary and every report; never as a pass.
+
+A check has three states: PASS, FAIL, UNVERIFIABLE.  The verdict is FAIL if
+any check FAILs; UNVERIFIABLE never turns into a pass by silence — refusal
+beats a guess.
 """
 
 from __future__ import annotations
@@ -25,10 +35,10 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from judge.marketdata import drift_24h_at, ensure_klines, next_bar_open
+from judge.marketdata import TF_MS, drift_24h_at, ensure_klines, next_bar_open
 from judge.overlap import resolve_overlaps
 
-CRITERIA_VERSION = "1.0.1"
+CRITERIA_VERSION = "1.1.0"
 MIN_TRADES = 100
 BOOT_N = 1000
 BOOT_PCTL = 97.5
@@ -36,6 +46,10 @@ REGIME_DRIFT = 0.015
 REGIME_MIN_TRADES = 10
 REGIME_POS_FRAC = 0.60
 RNG_SEED = 20260706          # fixed: identical verdict on identical input
+LOOKAHEAD_BAR_MS = TF_MS     # "same bar" for C6 is the judge's 1h bar
+MAX_ROWS_NAMED = 5           # how many offending CSV lines a detail names
+
+PASS, FAIL, UNVERIFIABLE = "PASS", "FAIL", "UNVERIFIABLE"
 
 
 @dataclass
@@ -45,6 +59,13 @@ class CheckResult:
     passed: bool
     key_number: str
     detail: str
+    status: str = ""            # PASS | FAIL | UNVERIFIABLE
+
+    def __post_init__(self):
+        if not self.status:
+            self.status = PASS if self.passed else FAIL
+        if self.status == UNVERIFIABLE:
+            self.passed = False     # never counts as a pass
 
 
 @dataclass
@@ -64,6 +85,96 @@ class AuditResult:
     client_pctl: float = 0.0
     half_means: tuple[float, float] = (0.0, 0.0)
     regime_table: pd.DataFrame | None = None
+
+    @property
+    def unverifiable(self) -> list[CheckResult]:
+        return [c for c in self.checks if c.status == UNVERIFIABLE]
+
+    @property
+    def evaluated(self) -> list[CheckResult]:
+        return [c for c in self.checks if c.status != UNVERIFIABLE]
+
+
+def _rows(tr: pd.DataFrame, mask) -> list[int]:
+    """Source CSV line numbers for the rows selected by mask."""
+    if "row" in tr.columns:
+        return [int(r) for r in tr.loc[mask, "row"]]
+    return [int(i) + 1 for i in tr.index[mask]]
+
+
+def _name_rows(rows: list[int]) -> str:
+    shown = ", ".join(str(r) for r in rows[:MAX_ROWS_NAMED])
+    more = (f", +{len(rows) - MAX_ROWS_NAMED} more"
+            if len(rows) > MAX_ROWS_NAMED else "")
+    return f"CSV line{'s' if len(rows) != 1 else ''} {shown}{more}"
+
+
+def check_lookahead(tr: pd.DataFrame) -> CheckResult:
+    """C6 — signal_time vs entry_time on the log's own timestamps.
+
+    FAIL   if any signal_time >= entry_time (the decision is logged as made
+           when or after the position was open), or if any entry falls
+           inside the signal's own 1h bar (it books the move that made the
+           signal).  Both kinds are counted and named by CSV line.
+    PASS   otherwise.  This verifies declared timestamps only — it cannot
+           see the strategy's data feed.
+    UNVERIFIABLE if the log has no signal_time (or no evaluable trades)."""
+    n = len(tr)
+    has_col = "signal_time" in tr.columns and tr["signal_time"].notna().any()
+    if n == 0 or not has_col:
+        why = "no evaluable trades" if n == 0 else "no signal_time column"
+        return CheckResult(
+            "C6", "Look-ahead", False, why,
+            "The log carries no signal_time (decision time), so the judge "
+            "cannot tell whether an entry was booked before its signal could "
+            "be known. A look-ahead-biased log passes C1-C5 untouched. Add a "
+            "signal_time column (aliases: decision_time, signal_ts, sig_time) "
+            "and re-run to make this check evaluable.",
+            status=UNVERIFIABLE)
+    sig = tr["signal_time"]
+    ent = tr["entry_time"]
+    missing = sig.isna()
+    if missing.any():
+        return CheckResult(
+            "C6", "Look-ahead", False,
+            f"{int(missing.sum())}/{n} trades lack signal_time",
+            f"{int(missing.sum())} of {n} trades have no signal_time "
+            f"({_name_rows(_rows(tr, missing))}). The check needs a decision "
+            "time on every trade; fill them in and re-run.",
+            status=UNVERIFIABLE)
+
+    not_before = sig >= ent
+    same_bar = (~not_before) & (sig.dt.floor("h") == ent.dt.floor("h"))
+    n_nb, n_sb = int(not_before.sum()), int(same_bar.sum())
+    if n_nb == 0 and n_sb == 0:
+        return CheckResult(
+            "C6", "Look-ahead", True, f"0/{n} trades",
+            f"All {n} entries are booked after their signal and outside the "
+            "signal's 1h bar (an entry at the open of a later bar is clean). "
+            "Verified on the log's own timestamps only - the judge cannot see "
+            "the strategy's data feed.")
+    parts = []
+    if n_nb:
+        lag = (sig - ent)[not_before]
+        w = lag.idxmax()
+        mins = lag.loc[w].total_seconds() / 60.0
+        w_row = _rows(tr, tr.index == w)[0]
+        parts.append(
+            f"{n_nb} of {n} trades have signal_time at or after entry_time - "
+            f"the decision is logged as made when the position was already "
+            f"open (worst: CSV line {w_row}, signal {sig.loc[w]:%Y-%m-%d %H:%M} "
+            f"is {mins:+.0f} min relative to entry {ent.loc[w]:%Y-%m-%d %H:%M}; "
+            f"{_name_rows(_rows(tr, not_before))})")
+    if n_sb:
+        parts.append(
+            f"{n_sb} of {n} trades enter inside the signal's own 1h bar "
+            f"({_name_rows(_rows(tr, same_bar))}) - the entry captures the "
+            "bar that produced the signal; a clean entry is at the open of a "
+            "later bar")
+    return CheckResult(
+        "C6", "Look-ahead", False, f"{n_nb + n_sb}/{n} trades",
+        "; ".join(parts) + ". Every other number in this report inherits "
+        "this bias.")
 
 
 def audit(trades: pd.DataFrame, fee_rt: float,
@@ -139,7 +250,7 @@ def audit(trades: pd.DataFrame, fee_rt: float,
     checks: list[CheckResult] = []
     n = len(tr)
 
-    step("check 1/5: sample size")
+    step("check 1/6: sample size")
     c1 = n >= MIN_TRADES
     checks.append(CheckResult(
         "C1", "Sample size", c1, f"{n} trades",
@@ -147,7 +258,7 @@ def audit(trades: pd.DataFrame, fee_rt: float,
         + ("" if c1 else "Too few trades for any of the following numbers "
                          "to be trusted.")))
 
-    step("check 2/5: fee survival")
+    step("check 2/6: fee survival")
     mean_net = float(net.mean()) if n else float("nan")
     c2 = n > 0 and mean_net > 0
     checks.append(CheckResult(
@@ -155,7 +266,7 @@ def audit(trades: pd.DataFrame, fee_rt: float,
         f"Mean net PnL {mean_net:+.3f}%/trade after a {fee_rt:.3f}% "
         f"round-trip fee (bar: > 0)."))
 
-    step("check 3/5: random-walk neutrality (1000 bootstraps)")
+    step("check 3/6: random-walk neutrality (1000 bootstraps)")
     rng = np.random.default_rng(RNG_SEED)
     signs = rng.choice([-1.0, 1.0], size=(BOOT_N, n))
     boot_totals = (signs * gross[None, :] - fee_rt).sum(axis=1)
@@ -168,7 +279,7 @@ def audit(trades: pd.DataFrame, fee_rt: float,
         f"of {BOOT_N} direction-randomized logs (bar: >= {BOOT_PCTL}). "
         + ("" if c3 else "Flipping a coin for direction does as well.")))
 
-    step("check 4/5: stability across halves")
+    step("check 4/6: stability across halves")
     mid_time = tr["entry_time"].min() + (tr["entry_time"].max()
                                          - tr["entry_time"].min()) / 2
     first = tr[tr["entry_time"] <= mid_time]["net_pct"]
@@ -184,7 +295,7 @@ def audit(trades: pd.DataFrame, fee_rt: float,
         + ("" if c4 else "A sign flip between halves is the signature of a "
                          "regime artifact, not an edge.")))
 
-    step("check 5/5: regime robustness")
+    step("check 5/6: regime robustness")
     regimes = []
     for _, row in tr.iterrows():
         d = drift_24h_at(klines[row["symbol"]],
@@ -210,7 +321,15 @@ def audit(trades: pd.DataFrame, fee_rt: float,
                 f"24h market drift at entry (+-{REGIME_DRIFT:.1%}).")
     checks.append(CheckResult("C5", "Regime robustness", c5, key5, det5))
 
-    verdict = "PASS" if all(c.passed for c in checks) else "FAIL"
+    step("check 6/6: look-ahead (signal vs entry timing)")
+    c6 = check_lookahead(tr)
+    checks.append(c6)
+    if c6.status == UNVERIFIABLE:
+        warnings.append(f"C6 look-ahead UNVERIFIABLE ({c6.key_number}): "
+                        "the judge could not check whether entries used "
+                        "information from the bar they were booked on.")
+
+    verdict = FAIL if any(c.status == FAIL for c in checks) else PASS
     return AuditResult(
         verdict=verdict, checks=checks, n_trades=n,
         n_dropped_overlap=dropped, reconstructed=reconstructed,

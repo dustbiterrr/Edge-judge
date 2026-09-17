@@ -2,8 +2,12 @@
 
 Product invariants (enforced in code, not hoped for):
   * never executes user code — reads a trade-log CSV, nothing else;
-  * verdict criteria are pre-registered in judge/ (v1.0) and are NOT
-    configurable here — the user picks only a fee profile;
+  * verdict criteria are pre-registered in judge/ (v1.1.0; C1-C5 frozen
+    since v1.0, C6 look-ahead added in v1.1.0) and are NOT configurable
+    here - the user picks only a fee profile and, for slash-style dates,
+    the day/month order;
+  * a check the judge cannot run is shown as UNVERIFIABLE on screen, in
+    the verdict line and in every report - never hidden behind a PASS;
   * no softening language: FAIL is FAIL with the reason in plain English.
 """
 
@@ -90,15 +94,22 @@ def date_format_selector() -> str | None:
     return _DATE_CHOICES[choice]
 
 
+_BADGE = {"PASS": "🟢 PASS", "FAIL": "🔴 FAIL",
+          "UNVERIFIABLE": "⚪ UNVERIFIABLE"}
+
+
 def show_verdict(res):
     color = PASS_GREEN if res.verdict == "PASS" else FAIL_RED
     st.markdown(
         f"<h2 style='color:{color};font-family:ui-monospace,monospace'>"
         f"{verdict_line(res)}</h2>", unsafe_allow_html=True)
+    for c in res.unverifiable:
+        st.warning(f"{c.code} {c.name}: UNVERIFIABLE ({c.key_number}). "
+                   f"{c.detail}")
 
     rows = []
     for c in res.checks:
-        badge = "🟢 PASS" if c.passed else "🔴 FAIL"
+        badge = _BADGE[c.status]
         rows.append({"#": c.code, "check": c.name, "result": badge,
                      "key number": c.key_number, "detail": c.detail})
     st.dataframe(rows, width="stretch", hide_index=True)

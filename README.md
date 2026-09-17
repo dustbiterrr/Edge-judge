@@ -46,11 +46,11 @@ The research probes that regenerate campaign CSVs (`setup_probe`, `appendix_*`, 
 
 ```
 edge-judge/
-├── judge/                          # the judge as a library - criteria v1.0.1, frozen
+├── judge/                          # the judge as a library - criteria v1.1.0 (C1-C5 frozen since v1.0)
 │   ├── ingest.py                   #   trade-log CSV -> validated trades, human errors
 │   ├── overlap.py                  #   one-position-at-a-time resolution
 │   ├── marketdata.py               #   1h klines, cache-first, archive dumps only
-│   ├── checks.py                   #   the five pre-registered checks
+│   ├── checks.py                   #   the six pre-registered checks; C6 is UNVERIFIABLE without signal_time
 │   ├── report.py                   #   verdict line, md / self-contained html, charts
 │   └── __main__.py                 #   CLI entry: python -m judge audit ...
 ├── app.py                          # Streamlit web app (upload / demo verdict)
@@ -114,8 +114,12 @@ base. Use it only for a full reproduction after fetching all 13 symbols for
 the campaign window - on partial data it replaces real logs with partial ones.
 
 To judge **your** strategy: export its trades to CSV (`symbol, side,
-entry_time, exit_time, [entry_price, exit_price, qty]`) and feed it to the
-CLI or the web app. To put a *rule* through the research grid instead:
+entry_time, exit_time, [signal_time, entry_price, exit_price, qty]`) and feed
+it to the CLI or the web app. Include `signal_time` - the moment each
+decision was made - or the look-ahead check (C6) is reported UNVERIFIABLE:
+a log that entered on the bar that produced its signal passes the five
+statistical checks untouched, and the judge will say so rather than PASS
+it quietly. To put a *rule* through the research grid instead:
 implement it as a `bars -> {-1,0,+1}` function in `scripts/setup_library.py`,
 add it to the registry, and let `scripts/setup_probe.py` run. If it survives,
 you have something. Ours didn't - and knowing that cost us a GPU budget
@@ -125,19 +129,30 @@ instead of a deposit.
 
 ```bash
 python -m judge audit --log trades.csv --out out/report.md \
-    [--fees binance-taker|binance-maker|<bps-per-side>] [--symbol ETHUSDT]
+    [--fees binance-taker|binance-maker|<bps-per-side>] [--symbol ETHUSDT] \
+    [--date-format DMY|MDY]
 ```
 
-Reads a trade-log CSV (never your code), runs the five pre-registered checks
-(criteria v1.0.1 - not configurable from any flag; the only input besides the
-log is the fee profile, a property of your exchange), and writes a markdown
-or self-contained HTML report. Exit code 0 = PASS, 1 = FAIL.
+Reads a trade-log CSV (never your code), runs the six pre-registered checks
+(criteria v1.1.0 - not configurable from any flag; the only inputs besides
+the log are the fee profile, a property of your exchange, and the day/month
+order for slash-style dates), and writes a markdown or self-contained HTML
+report. Exit code 0 = PASS, 1 = FAIL. Every check has three states: PASS,
+FAIL, UNVERIFIABLE - and an unverifiable check is named in the verdict
+line (`PASS - 5 of 5 evaluated checks passed ...; C6 look-ahead
+UNVERIFIABLE (no signal_time column)`), never folded into a pass.
 
-v1.0.1 fixes a regime-lookup lookahead affecting mid-bar entries; verdicts
-on bar-aligned logs are unchanged.
+Slash-style dates (`03/02/2026`) are read under one day/month rule for the
+whole file, inferred only when a value forces it; an all-ambiguous file is
+refused unless `--date-format` states the rule.
+
+v1.1.0 adds C6 look-ahead: `signal_time` must be strictly before
+`entry_time` and outside the signal's own 1h bar (entering at the open of a
+later bar is clean). v1.0.1 fixed a regime-lookup lookahead affecting
+mid-bar entries; C1-C5 are unchanged since v1.0.
 
 Self-test: the judge reproduces the campaign's own FAIL on its own logs -
-`results/s02_trades_LINKUSDT_16.csv` yields `FAIL - 4 of 5 checks failed`,
+`results/s02_trades_LINKUSDT_16.csv` yields `FAIL - 4 of 6 checks failed`,
 with the same numbers the campaign recorded (mean −0.140%/trade, halves
 −0.421% / +0.217%, n=118).
 
@@ -162,6 +177,7 @@ unit tests in `tests/` (`pytest -q tests`).
 - Not a profitable strategy. The honest result of the campaign is negative, and we publish it as such.
 - Not financial advice. It is a methodology for not fooling yourself.
 - Not exhaustive. Real-L2 market-making and cross-venue structure were out of scope (data requirements).
+- Not a view into your code or data feed. The judge sees a trade log, nothing else: C6 checks the decision times you declare, and without them it says UNVERIFIABLE rather than guessing. It cannot certify pre-registration, walk-forward provenance, or that your prices came from data available at the time.
 
 ## License
 

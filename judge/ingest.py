@@ -8,6 +8,11 @@ Required columns (aliases accepted, case-insensitive):
     exit_time   parseable datetime
 Optional:
     entry_price, exit_price (aliases: entry_px, exit_px), qty
+    signal_time (aliases: decision_time, signal_ts, sig_time, ...) - the
+                moment the decision was made.  Enables the C6 look-ahead
+                check; without it C6 is reported UNVERIFIABLE.
+Every trade keeps `row`, its 1-based line number in the source CSV, so a
+check can name the offending line rather than a position in a sorted table.
 
 Every validation failure raises IngestError with a .message a human can act
 on.  Non-fatal issues (overlaps, reconstructed prices) come back as warnings.
@@ -39,12 +44,17 @@ ALIASES = {
     "entry_price": ["entry_price", "entry_px", "open_price", "price_in"],
     "exit_price": ["exit_price", "exit_px", "close_price", "price_out"],
     "qty": ["qty", "quantity", "size", "amount"],
+    # decision time - time-like names only; a bare "signal" column usually
+    # holds the signal VALUE (+1/-1), not a timestamp
+    "signal_time": ["signal_time", "signal_ts", "signal_timestamp",
+                    "decision_time", "decision_ts", "sig_time", "signal_at",
+                    "decided_at"],
 }
 
 TEMPLATE_CSV = (
-    "symbol,side,entry_time,exit_time,entry_price,exit_price,qty\n"
-    "ETHUSDT,long,2026-01-05 10:00,2026-01-05 18:00,3010.5,3042.0,0.5\n"
-    "ETHUSDT,short,2026-01-06 02:00,2026-01-06 09:00,3055.0,3021.2,0.5\n"
+    "symbol,side,signal_time,entry_time,exit_time,entry_price,exit_price,qty\n"
+    "ETHUSDT,long,2026-01-05 09:00,2026-01-05 10:00,2026-01-05 18:00,3010.5,3042.0,0.5\n"
+    "ETHUSDT,short,2026-01-06 01:00,2026-01-06 02:00,2026-01-06 09:00,3055.0,3021.2,0.5\n"
 )
 
 
@@ -71,8 +81,8 @@ DATE_FORMATS = ("DMY", "MDY")
 def _slash_fields(series: pd.Series) -> list[tuple[int, int, int, str]]:
     """(first, second, source_row, value) for every slash-style value."""
     out = []
-    for i, v in zip(series.index, series.astype(str)):
-        m = _SLASH_DATE.match(v)
+    for i, v in zip(series.index, series):
+        m = _SLASH_DATE.match(v) if isinstance(v, str) else None
         if m:
             out.append((int(m.group(1)), int(m.group(2)), int(i), v.strip()))
     return out
@@ -172,7 +182,8 @@ def _parse_time_col(raw: pd.Series, col: str,
     # dayfirst=True makes dateutil swap day and month even in an ISO string
     # (2026-02-03 -> 2 March), so the rule is applied to slash-style values
     # ONLY; everything else is parsed with the default (ISO-safe) parser.
-    slash = raw.astype(str).str.match(_SLASH_DATE.pattern)
+    slash = raw.map(lambda v: isinstance(v, str)
+                    and _SLASH_DATE.match(v) is not None).astype(bool)
     with _warnings.catch_warnings():
         _warnings.simplefilter("ignore")        # dateutil dayfirst chatter
         parsed = pd.to_datetime(raw.where(~slash), errors="coerce", utc=True,
@@ -252,6 +263,7 @@ def load_trades(raw: bytes, filename: str = "log.csv",
 
     out = pd.DataFrame(index=df.index)   # keep source index: scalar
     # assignments must broadcast to every row, not create an empty frame
+    out["row"] = (df.index + 2).astype(int)     # CSV line number, header = 1
 
     # symbol: column, else argument, else filename hint like ..._ETHUSDT_...
     if mapping["symbol"] is not None:
@@ -285,18 +297,27 @@ def load_trades(raw: bytes, filename: str = "log.csv",
             f"{n_bad_side} rows have an unrecognized side value "
             f"(examples: {', '.join(ex)}). Use long/short, buy/sell or +1/-1.")
 
-    time_cols = {mapping[k]: df[mapping[k]] for k in ("entry_time", "exit_time")}
+    time_keys = ["entry_time", "exit_time"]
+    if mapping["signal_time"] is not None:
+        time_keys.append("signal_time")
+    time_cols = {mapping[k]: df[mapping[k]] for k in time_keys}
     rule = _infer_day_month_rule(time_cols, date_format, warnings)
-    for k in ("entry_time", "exit_time"):
+    for k in time_keys:
         parsed = _parse_time_col(df[mapping[k]], mapping[k], warnings, rule)
         bad = parsed.isna()
         if bad.any():
             rows = df.loc[bad, mapping[k]].astype(str).head(3).tolist()
+            hint = ("" if k != "signal_time" else
+                    " A signal_time column must be complete: fill every row, "
+                    "or drop the column and the look-ahead check is reported "
+                    "UNVERIFIABLE instead of guessed.")
             raise IngestError(
                 f"{int(bad.sum())} rows in '{mapping[k]}' failed to parse as "
                 f"datetimes. First broken values: {rows}. "
-                "Use ISO format like 2026-01-05 10:00 (UTC).")
+                "Use ISO format like 2026-01-05 10:00 (UTC)." + hint)
         out[k] = parsed
+    if mapping["signal_time"] is None:
+        out["signal_time"] = pd.NaT
 
     if (out["exit_time"] <= out["entry_time"]).any():
         n = int((out["exit_time"] <= out["entry_time"]).sum())

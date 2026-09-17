@@ -1,8 +1,9 @@
 """
 EdgeJudge — pre-registered trade-log audit.
 
-The criteria are FROZEN in checks.py (v1.0) and are not configurable from any
-UI or CLI flag.  The only user input besides the log is the fee profile —
+The criteria live in checks.py (v1.1.0: C1-C5 frozen since v1.0, C6
+look-ahead added in v1.1.0) and are not configurable from any UI or CLI
+flag.  A check the judge cannot run is reported UNVERIFIABLE, never passed.  The only user input besides the log is the fee profile —
 a property of the user's exchange, not of the judge.  The product never
 executes user code; it reads a CSV of trades, nothing else.
 """

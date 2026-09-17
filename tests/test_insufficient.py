@@ -26,8 +26,10 @@ def test_audit_returns_zero_trades_without_raising(klines_ending_before_the_log)
     res = audit(tr, 0.11)
     assert res.n_trades == 0
     assert res.verdict == "FAIL"
-    assert [c.code for c in res.checks] == ["C1", "C2", "C3", "C4", "C5"]
+    assert [c.code for c in res.checks] == ["C1", "C2", "C3", "C4", "C5",
+                                            "C6"]
     assert not any(c.passed for c in res.checks)
+    assert res.checks[5].status == "UNVERIFIABLE"      # no trades to check
     assert any("could not be priced" in w for w in res.warnings)
 
 
