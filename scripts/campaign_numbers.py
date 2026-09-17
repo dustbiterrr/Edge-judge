@@ -167,7 +167,21 @@ def main() -> int:
       "net_IN > 0, n >= 100 both halves)")
     passes("H1 S01-S13 setup library (10 symbols)", sp)
     passes("H1 S01-S13 untouched-symbol confirmation (ADA/XRP/DOT)", su)
+    print("    the 3 setups that survived screening, on the untouched symbols "
+          "(1h H=16, where they passed):")
+    surv = su[su["setup"].str.startswith(("S01", "S02", "S08"))
+              & (su["tf"] == "1h") & (su["H"] == 16)]
+    for _, r in surv.sort_values(["setup", "symbol"]).iterrows():
+        print(f"      {r['setup']:<20s} {r['symbol']:<9s} n_in={int(r['n_in']):4d} "
+              f"net_in={r['net_in']:+.3f}  n_out={int(r['n_out']):4d} "
+              f"net_out={r['net_out']:+.3f}  {r['status']}")
     passes("H1 S14-S19 appendix B", ab)
+    print("    per setup (n-guard is 100 OUT trades; S14 allowed 50):")
+    for setup, g in ab.groupby("setup", sort=True):
+        ev = g[g["status"] != "insufficient"]
+        pos = int((pd.to_numeric(ev["mean_out"], errors="coerce") > 0).sum())
+        print(f"      {setup:<20s} cells={len(g):2d}  max n_OUT={int(g['n_out'].max()):3d}  "
+              f"evaluable={len(ev):2d}  net-positive OUT={pos}")
     passes("EXT S01-S13 (13 symbols, 18.2 months)", e13)
     passes("EXT S14-S19 (18.2 months)", e19)
     e_pass = e13[e13["status"] == "PASS"]

@@ -135,7 +135,7 @@ CSV is listed here, because a PASS is only as strong as this list.
 
 - **It does not validate your costs.** C2 re-applies the fee profile *you* pick to every trade and ignores any PnL column in your log. The same log can flip between FAIL and PASS by switching taker to maker; slippage and funding are not modelled. The profile and rate are printed next to C2 in every report so this is never hidden.
 - **It cannot see selection.** How many variants you tried before this one, how many symbols you dropped, how many parameters you tuned - none of it is in a trade log. The campaign's answer to that was to count its own cells and print expected false passes next to actual ones (`scripts/campaign_numbers.py`). The judge cannot do that for you.
-- **It cannot see your code or your data feed.** Bugs, look-ahead in feature construction, survivorship in the instrument list, a backfilled column - all invisible from closed trades. In our own dogfood run 16 of 19 known defects in a strategy were structurally out of the judge's reach for this reason.
+- **It cannot see your code or your data feed.** Bugs, look-ahead in feature construction, survivorship in the instrument list, a backfilled column - all invisible from closed trades. In our own dogfood run, most of the defects we had catalogued in a strategy were structurally out of the judge's reach for this reason.
 
 ## CLI and web app
 
