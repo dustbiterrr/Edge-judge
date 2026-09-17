@@ -1,6 +1,6 @@
 # edge-judge
 
-**A falsification pipeline for trading strategies. Most backtests lie to their authors; this one makes lying hard.**
+**A trade-log judge for trading strategies. Most backtests lie to their authors; this one makes the common lies visible - and says out loud which ones it cannot see.**
 
 This repository contains the full tooling and results of a six-month campaign that set out to find directional edge on Binance perpetual futures with an RL trading system - and instead built something more useful: a judging protocol that killed every false positive it met, including the ones we badly wanted to believe.
 
@@ -79,7 +79,7 @@ edge-judge/
 ## The rules (non-negotiable)
 
 1. **Pre-register or it didn't happen.** Thresholds, sample guards, and confirmation criteria are written down *before* the run. Ours: OUT expectancy > 2× round-trip fee, IN/OUT sign agreement, n ≥ 100.
-2. **No look-ahead, mechanically.** Signal at bar T uses data ≤ close(T); execution at open(T+1); rolling windows backward-only; all quantile thresholds fitted on the IN half only.
+2. **No look-ahead, mechanically.** Signal at bar T uses data ≤ close(T); execution at open(T+1); rolling windows backward-only; all quantile thresholds fitted on the IN half only. This is how *our* probes were built. On *your* log the judge can verify only the decision times you declare (C6), and says UNVERIFIABLE when you declare none - see "What this is not".
 3. **Count what a trader gets, not what a bar shows.** Dense signals are judged one-position-at-a-time. Per-bar expectancy on an overlapping signal measures episode shape, not tradable edge (our stretch episodes averaged 3.9 bars - per-bar counting scored each ~4×, biased toward the deepest bars).
 4. **Account for luck.** Screening N cells means some pass by chance. Print expected false passes next to actual passes, always.
 5. **Confirm on untouched data.** Symbols/periods never seen during screening. Survivors of the grid died here - that is the system working.
@@ -179,10 +179,23 @@ unit tests in `tests/` (`pytest -q tests`).
 
 ## What this is not
 
-- Not a profitable strategy. The honest result of the campaign is negative, and we publish it as such.
-- Not financial advice. It is a methodology for not fooling yourself.
-- Not exhaustive. Real-L2 market-making and cross-venue structure were out of scope (data requirements).
-- Not a view into your code or data feed. The judge sees a trade log, nothing else: C6 checks the decision times you declare, and without them it says UNVERIFIABLE rather than guessing. It cannot certify pre-registration, walk-forward provenance, or that your prices came from data available at the time.
+The judge reads a CSV of closed trades. Everything it cannot see from that
+CSV is listed here, because a PASS is only as strong as this list.
+
+- **Not a profitable strategy.** The honest result of the campaign is negative, and we publish it as such.
+- **Not financial advice.** It is a methodology for not fooling yourself.
+- **Not exhaustive.** Real-L2 market-making and cross-venue structure were out of scope (data requirements).
+
+- **It cannot certify pre-registration.** A trade log carries no proof that the hypothesis, the thresholds or the IN/OUT split were fixed *before* the results were seen. C4 splits whatever log it is handed in half; an author who tuned thresholds on the whole sample and submits every trade can pass C3 and C4 on pure overfit, and the judge has no way to tell. This is the campaign's blocker B1, found while dogfooding the judge on our own strategy, and it is closed by this sentence, not by a check: the only proof of pre-registration is an external, dated artifact - a commit hash, a signed document - never a statistic computed on the log. If you want a verdict that means "out-of-sample", pre-register outside the judge and submit only the trades after that date.
+
+- **It checks look-ahead only as far as you let it, and says so.** Since v1.1.0:
+  - *What is checked (C6), and on what data.* When every trade carries a `signal_time` (aliases: `decision_time`, `signal_ts`, `sig_time`), the judge verifies that each entry is strictly after its signal and outside the signal's own 1h bar; an entry at the open of a later bar is clean. It counts the offending trades, names their CSV lines and the worst case. A log whose entries were booked on the bar that produced the signal - which passed all five statistical checks at the 100th percentile before v1.1.0 - now fails C6.
+  - *What is never checked.* Whether the prices or indicators behind the signal were available at `signal_time` (vendor backfill, revised data, indicators computed on the whole series); anything finer than the 1h bar; and whether the `signal_time` column is truthful. C6 verifies declared timestamps; a fabricated column passes it. Sub-hour strategies that decide and enter inside one 1h bar fail C6 by design - the judge prefers a wrong refusal to a wrong pass.
+  - *What UNVERIFIABLE means, and why it is not PASS.* If the log has no `signal_time`, C6 does not run. The verdict line says so - `PASS - 5 of 5 evaluated checks passed ...; C6 look-ahead UNVERIFIABLE (no signal_time column)` - and so do the summary, the Notes and the web app. Five statistical passes with C6 unverifiable are exactly what a look-ahead-biased log produces; the judge measured that. Treat such a verdict as "the numbers hold up *if* the timing was honest, and the judge could not check the timing".
+
+- **It does not validate your costs.** C2 re-applies the fee profile *you* pick to every trade and ignores any PnL column in your log. The same log can flip between FAIL and PASS by switching taker to maker; slippage and funding are not modelled. The profile and rate are printed next to C2 in every report so this is never hidden.
+- **It cannot see selection.** How many variants you tried before this one, how many symbols you dropped, how many parameters you tuned - none of it is in a trade log. The campaign's answer to that was to count its own cells and print expected false passes next to actual ones (`scripts/campaign_numbers.py`). The judge cannot do that for you.
+- **It cannot see your code or your data feed.** Bugs, look-ahead in feature construction, survivorship in the instrument list, a backfilled column - all invisible from closed trades. In our own dogfood run 16 of 19 known defects in a strategy were structurally out of the judge's reach for this reason.
 
 ## License
 
