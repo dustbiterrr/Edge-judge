@@ -72,7 +72,12 @@ ADF_P = 0.05
 Z_IN, Z_OUT = 2.5, 0.5
 PAIR_COST = 2 * FEE_RT              # 0.22%: both legs round-tripped
 
-PRIOR_CELLS, PRIOR_EFALSE = 1200, 1.40
+# Unique H1-2026 cells with a CSV in results/ (scripts/count_cells.py):
+# 780 setup wave + 234 untouched + 156 appendix B + 4 S20 + 27 funding.
+# The ~90 generic-probe cells have no CSV and are not counted.  PRIOR_EFALSE
+# is the ledger the earlier probes printed at run time; the CSVs do not
+# carry the per-trade sigma needed to recompute it.
+PRIOR_CELLS, PRIOR_EFALSE = 1201, 1.40
 DATA = Path("data/native")
 RES = Path("results")
 
@@ -375,8 +380,10 @@ def main() -> int:
               f" (S19 twin reproduced).")
     print(f"\n  FALSE-PASS LEDGER: this wave {n_eval} evaluable cells, "
           f"E[false] ~ {e_false:.2f}")
-    print(f"  campaign cumulative: ~{PRIOR_CELLS + len(res)} cells, "
-          f"E[false] ~ {PRIOR_EFALSE + e_false:.2f}")
+    print(f"  campaign cumulative: {PRIOR_CELLS + len(res)} unique cells "
+          f"with a CSV in results/ (+90 generic-probe cells, console only), "
+          f"E[false] ~ {PRIOR_EFALSE + e_false:.2f} (prior waves' E "
+          f"recorded at run time, not reproducible from results/)")
     print()
     if npass == 0:
         print("  => No new-class edge cleared its pre-registered bar. Most "

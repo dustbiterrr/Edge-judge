@@ -14,7 +14,10 @@ Retail backtests fail their authors in repeatable ways: thresholds tuned on the 
 
 ## What the judge caught (case study)
 
-We ran the full protocol against one system's worth of hypotheses. Every number below is from the CSVs in `results/`.
+We ran the full protocol against one system's worth of hypotheses. A number
+marked † was printed by a probe at run time and never written to a CSV: it is
+quoted from the run and is **not reproducible from this repository**. Cell
+counts reproduce with `python scripts/count_cells.py`.
 
 | Stage | Hypothesis | Verdict |
 |---|---|---|
@@ -29,15 +32,15 @@ We ran the full protocol against one system's worth of hypotheses. Every number 
 
 The last row is the whole point. A per-bar backtest showed +0.63% on the best cell. Honest one-position execution plus one pre-registered criterion - *sign agreement between halves* - revealed the "edge" was April–July weather. That single line of protocol is the difference between a research note and a drawdown.
 
-**Final state: on 1m–1h bar data for these 13 instruments in H1-2026, nothing beats the commission.** Closing arithmetic: **~1,200 cells screened across all waves, ~1.4 false passes expected by chance, confirmed edges: 0** - a result statistically indistinguishable from an honest search of a dead space, which is exactly what validates the instrument. Directional prediction is dead everywhere we looked; the structural premium was absent in this window (regime-dependent - we monitor the funding rate, we don't trade it). What survives is the judge itself - and the map of where not to dig.
+**Final state: on 1m–1h bar data for these 13 instruments in H1-2026, nothing beats the commission.** Closing arithmetic for H1-2026: **1,201 unique cells with a CSV in `results/`** - 780 setup-library + 234 untouched-symbol confirmation + 156 appendix B + 4 relative-value configs + 27 funding-carry strategy×symbol cells (`python scripts/count_cells.py`) - plus ~90 generic-probe cells that were printed and never written to CSV†. The false-pass ledger the probes printed at run time summed to ~1.4†; the CSVs do not carry the per-trade sigma it needs, so it cannot be recomputed here. **Confirmed edges: 0** - a result consistent with an honest search of a dead space, which is what validates the instrument. Directional prediction is dead everywhere we looked; the structural premium was absent in this window (regime-dependent - we monitor the funding rate, we don't trade it). What survives is the judge itself - and the map of where not to dig.
 
-**Extended-window confirmation (18.2 months, 2025-01 → 2026-07, ~2,500 cumulative cells).** Re-run across a hard bull→bear walk-forward split (IN drift −11% / funding +0.35bp → OUT drift −71% / funding −0.19bp - the most adversarial regime cut available):
+**Extended-window re-run (18.2 months, 2025-01 → 2026-07-06).** 1,174 of the H1 cells were re-tested on the long window - all 1,014 S01–S13 cells including the untouched symbols, all 156 S14–S19 cells, the 4 S20 configs - and 69 structural cells (S21–S23) were added: **1,270 unique cells campaign-wide** (`python scripts/count_cells.py`; the earlier "~2,500 cumulative" counted the re-tests as new cells). The split is a hard bull→bear cut (IN drift −11% / funding +0.35bp → OUT drift −71% / funding −0.19bp†, the most adversarial regime cut available):
 
 - **Directional (S01–S19): death confirmed, tighter.** Pooled OUT expectancy **−0.091%/trade, 95% CI [−0.101, −0.082]** - the interval now excludes zero. Doubling the sample narrowed the confidence bound instead of revealing an edge, exactly as pre-registered.
 - **Structural classes, tested at power for the first time:** relative-value (S20) upgraded from *insufficient* to **falsified** (274 cycles, best +0.035% ≪ +0.44% bar); cointegration (S22) - 4 pairs reached sample, all **FAIL**; weekend-vacuum (S23) still under-powered (needs ~5-year window - the one honestly-undertested door).
 - **One mechanism, every level.** S20 and all four evaluable S22 cells died by the *same* IN+ → OUT− sign flip that killed S02: mean-reversion and spread strategies that worked in the bullish first half broke in the bearish second. The campaign didn't just find zero - it measured *why*: patterns that work in one regime don't survive the regime change.
 
-Zero edges across ~2,500 cumulative cells, through two market regimes, at statistical power. That is not fatigue - it is a result.
+Zero confirmed edges across 1,270 unique cells, 1,174 of them tested through two market regimes. That is not fatigue - it is a result.
 
 ## Repository layout
 

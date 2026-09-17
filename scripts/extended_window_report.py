@@ -252,8 +252,9 @@ def main() -> int:
     print("=" * 96)
     directional_ci()
     structural_verdict(full)
-    print(f"\n  merged cells -> {RES / 'extended_window_full.csv'} "
-          f"({len(full)} rows)")
+    print(f"\n  merged rows -> {RES / 'extended_window_full.csv'} "
+          f"({len(full)} rows; one row per cell x half for S20, per cell "
+          f"otherwise - cells are counted by scripts/count_cells.py)")
     print("  Any PASS on OUT above is a CANDIDATE, not an edge — confirm on "
           "untouched symbols/period first.")
     return 0

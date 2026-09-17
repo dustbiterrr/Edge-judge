@@ -63,9 +63,17 @@ PLAN = {
     "S19 liq-cascade": ("1h", [(8, 8), (16, 16)], 100),
 }
 
-# recorded ledger of earlier waves (approximate for per-bar waves)
-PRIOR_CELLS = 780 + 90 + 26          # setup wave + generic wave + s02 judge
-PRIOR_EFALSE = 1.25 + 0.10 + 0.05    # recorded / conservative estimates
+# Ledger of earlier waves.  Cells are UNIQUE hypotheses with a CSV in
+# results/ (scripts/count_cells.py is the source of truth): the 780-cell
+# setup wave + the 234-cell untouched-symbol confirmation.  Two things are
+# deliberately NOT in PRIOR_CELLS: the ~90 generic-probe cells (no CSV was
+# ever written) and the 26 S02 non-overlap runs (re-evaluations of cells
+# already counted).  PRIOR_EFALSE is what the earlier probes printed at
+# run time - it needs each cell's per-trade sigma, which the CSVs do not
+# carry, so it is a recorded number, not one reproducible from results/.
+PRIOR_CELLS = 780 + 234              # setup wave + untouched confirmation
+PRIOR_CELLS_NO_CSV = 90              # generic 15m/1h probe, console only
+PRIOR_EFALSE = 1.25 + 0.10 + 0.05    # recorded at run time; not reproducible
 
 
 def phi(x: float) -> float:
@@ -189,9 +197,11 @@ def main() -> int:
     print("\n  FALSE-PASS LEDGER:")
     print(f"    this wave: {n_eval} evaluable cells, E[false] ~ {e_false:.2f} "
           f"(normal approx; honest — non-overlapping trades)")
-    print(f"    campaign cumulative: ~{PRIOR_CELLS + len(res)} cells tested, "
-          f"E[false] ~ {PRIOR_EFALSE + e_false:.2f} "
-          f"(prior waves approximate: per-bar cells' E recorded/estimated)")
+    print(f"    campaign cumulative: {PRIOR_CELLS + len(res)} unique cells "
+          f"with a CSV in results/ (+{PRIOR_CELLS_NO_CSV} generic-probe "
+          f"cells, console only), E[false] ~ {PRIOR_EFALSE + e_false:.2f} "
+          f"(prior waves' E recorded at run time, not reproducible from "
+          f"results/; per-bar cells' E is an underestimate)")
 
     # ── verdict ──────────────────────────────────────────────────────────────
     n_pass = len(passed)
