@@ -53,12 +53,15 @@ def main() -> int:
     args = p.parse_args()
 
     fee_rt = parse_fees(args.fees)
+    fee_label = (args.fees if args.fees in FEE_PROFILES
+                 else f"custom {args.fees} bps/side")
     raw = Path(args.log).read_bytes()
     try:
         trades, warns = load_trades(raw, filename=Path(args.log).name,
                                     symbol=args.symbol,
                                     date_format=args.date_format)
-        res = audit(trades, fee_rt, progress=lambda m: print(f"  .. {m}"))
+        res = audit(trades, fee_rt, progress=lambda m: print(f"  .. {m}"),
+                    fee_label=fee_label)
     except (IngestError, MarketDataError) as e:
         print(f"ERROR: {e}")
         return 2
@@ -76,6 +79,8 @@ def main() -> int:
     print(verdict_line(res))
     for c in res.checks:
         print(f"  {c.code} {c.status:<12} {c.name:<28} {c.key_number}")
+        if c.code == "C2":
+            print(f"      {res.cost_note}")
         if c.status == "UNVERIFIABLE":
             print(f"      {c.detail}")
     print(f"report -> {out}")

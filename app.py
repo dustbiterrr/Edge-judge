@@ -31,7 +31,7 @@ DEMO_SYMBOL = "LINKUSDT"
 
 def run_pipeline(raw: bytes, filename: str, fee_rt: float,
                  symbol: str | None = None, status=None,
-                 date_format: str | None = None):
+                 date_format: str | None = None, fee_label: str = ""):
     """The single audit path used by BOTH the upload flow and the demo
     button.  Returns (result | None, error_message | None)."""
     def prog(msg):
@@ -42,7 +42,7 @@ def run_pipeline(raw: bytes, filename: str, fee_rt: float,
                                     date_format=date_format)
         # overlap resolution happens ONCE, inside audit(); its warning covers
         # the dropped-trades story
-        res = audit(trades, fee_rt, progress=prog)
+        res = audit(trades, fee_rt, progress=prog, fee_label=fee_label)
         res.warnings = warns + res.warnings
         if res.n_trades == 0:
             return None, (
@@ -61,7 +61,9 @@ def run_pipeline(raw: bytes, filename: str, fee_rt: float,
                       f"template columns and retry.")
 
 
-def fee_selector() -> float:
+def fee_selector() -> tuple[float, str]:
+    """(round-trip fee %, label) - the label follows the number into every
+    report so a verdict never hides which rate produced it."""
     prof = st.radio(
         "Fee profile (property of your exchange — the verdict criteria are "
         "fixed and not configurable)",
@@ -70,12 +72,12 @@ def fee_selector() -> float:
          "Custom"],
         horizontal=True)
     if prof.startswith("Binance perp taker"):
-        return FEE_PROFILES["binance-taker"]
+        return FEE_PROFILES["binance-taker"], "binance-taker"
     if prof.startswith("Binance perp maker"):
-        return FEE_PROFILES["binance-maker"]
+        return FEE_PROFILES["binance-maker"], "binance-maker"
     bps = st.number_input("bps per side", min_value=0.0, max_value=50.0,
                           value=5.5, step=0.5)
-    return bps * 2 / 100.0
+    return bps * 2 / 100.0, f"custom {bps:g} bps/side"
 
 
 _DATE_CHOICES = {
@@ -113,6 +115,7 @@ def show_verdict(res):
         rows.append({"#": c.code, "check": c.name, "result": badge,
                      "key number": c.key_number, "detail": c.detail})
     st.dataframe(rows, width="stretch", hide_index=True)
+    st.caption(f"C2: {res.cost_note}")
 
     if res.reconstructed:
         st.warning("prices reconstructed from market data "
@@ -148,7 +151,7 @@ def main():
              "strategy show a real edge, or luck dressed up? "
              "We never run your code — only a CSV of your trades.")
 
-    fee_rt = fee_selector()
+    fee_rt, fee_label = fee_selector()
     date_format = date_format_selector()
 
     left, right = st.columns([3, 2])
@@ -179,7 +182,7 @@ def main():
                            expanded=True) as status:
                 res, err = run_pipeline(DEMO_LOG.read_bytes(), DEMO_LOG.name,
                                         fee_rt, symbol=DEMO_SYMBOL,
-                                        status=status)
+                                        status=status, fee_label=fee_label)
                 if err:
                     st.error(err)
                 else:
@@ -189,7 +192,8 @@ def main():
         raw = up.getvalue()
         with st.status("Auditing your log…", expanded=True) as status:
             res, err = run_pipeline(raw, up.name, fee_rt, status=status,
-                                    date_format=date_format)
+                                    date_format=date_format,
+                                    fee_label=fee_label)
             if err:
                 st.error(err)
             else:

@@ -202,7 +202,7 @@ def _criteria_rows(res) -> str:
 
 def to_markdown(res) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    warn = "\n".join(f"- {w}" for w in res.warnings) or "- none"
+    warn = "\n".join(f"- {w}" for w in [res.cost_note, *res.warnings])
     return f"""# EdgeJudge report
 
 **{verdict_line(res)}**
@@ -242,8 +242,8 @@ def to_html(res) -> str:
                  f"<td style='color:{b[1]};font-weight:700'>{b[0]}</td>"
                  f"<td class='mono'>{c.key_number}</td>"
                  f"<td>{c.detail}</td></tr>\n")
-    warn = ("".join(f"<li>{html.escape(w)}</li>" for w in res.warnings)
-            or "<li>none</li>")
+    warn = "".join(f"<li>{html.escape(w)}</li>"
+                   for w in [res.cost_note, *res.warnings])
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>EdgeJudge report</title><style>
 body{{font-family:Georgia,serif;max-width:860px;margin:32px auto;padding:0 16px;color:#233742}}

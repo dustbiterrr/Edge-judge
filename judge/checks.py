@@ -76,6 +76,7 @@ class AuditResult:
     n_dropped_overlap: int
     reconstructed: bool
     fee_rt: float
+    fee_label: str = ""                # "binance-taker" | "custom 3 bps/side"
     criteria_version: str = CRITERIA_VERSION
     warnings: list[str] = field(default_factory=list)
     # chart artifacts
@@ -93,6 +94,15 @@ class AuditResult:
     @property
     def evaluated(self) -> list[CheckResult]:
         return [c for c in self.checks if c.status != UNVERIFIABLE]
+
+    @property
+    def cost_note(self) -> str:
+        """Printed next to C2 everywhere: the fee is an input, not a finding."""
+        return (f"costs re-computed at {self.fee_label or 'custom'} "
+                f"{self.fee_rt:.3f}% round trip on every trade; this does not "
+                "validate the author's own cost assumptions - the same log "
+                "can flip C2 under a different profile, and slippage or "
+                "funding are not modelled.")
 
 
 def _rows(tr: pd.DataFrame, mask) -> list[int]:
@@ -178,8 +188,9 @@ def check_lookahead(tr: pd.DataFrame) -> CheckResult:
 
 
 def audit(trades: pd.DataFrame, fee_rt: float,
-          progress=None) -> AuditResult:
-    """fee_rt = round-trip fee in % of notional (e.g. 0.11)."""
+          progress=None, fee_label: str = "") -> AuditResult:
+    """fee_rt = round-trip fee in % of notional (e.g. 0.11); fee_label names
+    the profile it came from so every report says which rate was used."""
     def step(msg):
         if progress:
             progress(msg)
@@ -264,7 +275,9 @@ def audit(trades: pd.DataFrame, fee_rt: float,
     checks.append(CheckResult(
         "C2", "Fee survival", c2, f"{mean_net:+.3f}%/trade",
         f"Mean net PnL {mean_net:+.3f}%/trade after a {fee_rt:.3f}% "
-        f"round-trip fee (bar: > 0)."))
+        f"round-trip fee [{fee_label or 'custom rate'}] (bar: > 0). The fee "
+        "is re-applied to every trade at this rate; any PnL column in the "
+        "log is ignored."))
 
     step("check 3/6: random-walk neutrality (1000 bootstraps)")
     rng = np.random.default_rng(RNG_SEED)
@@ -333,6 +346,6 @@ def audit(trades: pd.DataFrame, fee_rt: float,
     return AuditResult(
         verdict=verdict, checks=checks, n_trades=n,
         n_dropped_overlap=dropped, reconstructed=reconstructed,
-        fee_rt=fee_rt, warnings=warnings, trades=tr,
+        fee_rt=fee_rt, fee_label=fee_label, warnings=warnings, trades=tr,
         bootstrap_totals=boot_totals, client_total=client_total,
         client_pctl=pctl, half_means=(m1, m2), regime_table=rt)
