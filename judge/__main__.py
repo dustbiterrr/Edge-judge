@@ -1,5 +1,6 @@
 """CLI:  python -m judge audit --log trades.csv --out report.md
             [--fees binance-taker|binance-maker|<bps-per-side>] [--symbol SYM]
+            [--date-format DMY|MDY]
 """
 
 from __future__ import annotations
@@ -44,13 +45,19 @@ def main() -> int:
     a.add_argument("--fees", default="binance-taker")
     a.add_argument("--symbol", default=None,
                    help="symbol if the CSV has no symbol column")
+    a.add_argument("--date-format", default=None, choices=["DMY", "MDY"],
+                   dest="date_format",
+                   help="day/month order for slash-style dates (03/02/2026); "
+                        "required when every such date is ambiguous - the "
+                        "judge never guesses. ISO and epoch need no flag.")
     args = p.parse_args()
 
     fee_rt = parse_fees(args.fees)
     raw = Path(args.log).read_bytes()
     try:
         trades, warns = load_trades(raw, filename=Path(args.log).name,
-                                    symbol=args.symbol)
+                                    symbol=args.symbol,
+                                    date_format=args.date_format)
         res = audit(trades, fee_rt, progress=lambda m: print(f"  .. {m}"))
     except (IngestError, MarketDataError) as e:
         print(f"ERROR: {e}")

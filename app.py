@@ -26,14 +26,16 @@ DEMO_SYMBOL = "LINKUSDT"
 
 
 def run_pipeline(raw: bytes, filename: str, fee_rt: float,
-                 symbol: str | None = None, status=None):
+                 symbol: str | None = None, status=None,
+                 date_format: str | None = None):
     """The single audit path used by BOTH the upload flow and the demo
     button.  Returns (result | None, error_message | None)."""
     def prog(msg):
         if status is not None:
             status.write(f"⏳ {msg}")
     try:
-        trades, warns = load_trades(raw, filename=filename, symbol=symbol)
+        trades, warns = load_trades(raw, filename=filename, symbol=symbol,
+                                    date_format=date_format)
         # overlap resolution happens ONCE, inside audit(); its warning covers
         # the dropped-trades story
         res = audit(trades, fee_rt, progress=prog)
@@ -70,6 +72,22 @@ def fee_selector() -> float:
     bps = st.number_input("bps per side", min_value=0.0, max_value=50.0,
                           value=5.5, step=0.5)
     return bps * 2 / 100.0
+
+
+_DATE_CHOICES = {
+    "auto (ISO 2026-02-03 04:00, unix epoch, or unambiguous slash dates)": None,
+    "DD/MM/YYYY (day first)": "DMY",
+    "MM/DD/YYYY (month first)": "MDY",
+}
+
+
+def date_format_selector() -> str | None:
+    choice = st.selectbox(
+        "Date format in your file", list(_DATE_CHOICES),
+        help="Slash-style dates such as 03/02/2026 are read under ONE rule "
+             "for the whole file. If every such date is ambiguous the judge "
+             "refuses rather than guessing - pick the rule here.")
+    return _DATE_CHOICES[choice]
 
 
 def show_verdict(res):
@@ -120,6 +138,7 @@ def main():
              "We never run your code — only a CSV of your trades.")
 
     fee_rt = fee_selector()
+    date_format = date_format_selector()
 
     left, right = st.columns([3, 2])
     with left:
@@ -158,7 +177,8 @@ def main():
     elif up is not None:
         raw = up.getvalue()
         with st.status("Auditing your log…", expanded=True) as status:
-            res, err = run_pipeline(raw, up.name, fee_rt, status=status)
+            res, err = run_pipeline(raw, up.name, fee_rt, status=status,
+                                    date_format=date_format)
             if err:
                 st.error(err)
             else:

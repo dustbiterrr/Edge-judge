@@ -11,12 +11,19 @@ Optional:
 
 Every validation failure raises IngestError with a .message a human can act
 on.  Non-fatal issues (overlaps, reconstructed prices) come back as warnings.
+
+Dates: ISO (2026-02-03 04:00) and unix epoch are unambiguous.  Slash-style
+dates (03/02/2026) are parsed under ONE rule for the whole file - day-first
+or month-first - never row by row.  The rule is inferred only when some value
+forces it (a field > 12); an all-ambiguous file is rejected unless the caller
+passes date_format="DMY" | "MDY"; a file that forces both rules is rejected.
 """
 
 from __future__ import annotations
 
 import io
 import re
+import warnings as _warnings
 
 import numpy as np
 import pandas as pd
@@ -56,10 +63,91 @@ _EPOCH_UNITS = (
 )
 
 
+# slash-style date: two 1-2 digit fields, then a 2- or 4-digit year
+_SLASH_DATE = re.compile(r"^\s*(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})(?:[ T]|$)")
+DATE_FORMATS = ("DMY", "MDY")
+
+
+def _slash_fields(series: pd.Series) -> list[tuple[int, int, int, str]]:
+    """(first, second, source_row, value) for every slash-style value."""
+    out = []
+    for i, v in zip(series.index, series.astype(str)):
+        m = _SLASH_DATE.match(v)
+        if m:
+            out.append((int(m.group(1)), int(m.group(2)), int(i), v.strip()))
+    return out
+
+
+def _infer_day_month_rule(columns: dict[str, pd.Series],
+                          date_format: str | None,
+                          warnings: list[str]) -> str | None:
+    """One day/month rule for the whole file, or None when the file has no
+    slash-style dates.  Never guesses: an ambiguous file is an IngestError."""
+    if date_format is not None and date_format not in DATE_FORMATS:
+        raise IngestError(f"date_format must be one of {DATE_FORMATS}, "
+                          f"got {date_format!r}.")
+    fields = [(a, b, row, v, col) for col, ser in columns.items()
+              for a, b, row, v in _slash_fields(ser)]
+    if not fields:
+        return None
+    force_dmy = [f for f in fields if f[0] > 12]    # first field cannot be a month
+    force_mdy = [f for f in fields if f[1] > 12]    # second field cannot be a month
+    n_slash = len(fields)
+
+    def _ex(f):
+        return f"'{f[3]}' (row {f[2] + 2}, column {f[4]})"
+
+    if force_dmy and force_mdy:
+        raise IngestError(
+            "Dates in this file do not follow one rule: "
+            f"{_ex(force_dmy[0])} can only be day-first, but "
+            f"{_ex(force_mdy[0])} can only be month-first. The judge will "
+            "not parse rows by different rules. Re-export with ISO dates "
+            "(2026-02-03 04:00, UTC) or unix epoch timestamps.")
+    if date_format is not None:
+        if date_format == "DMY" and force_mdy:
+            raise IngestError(
+                f"date_format=DMY was requested but {_ex(force_mdy[0])} has "
+                "a month field > 12 under that rule. Check the export.")
+        if date_format == "MDY" and force_dmy:
+            raise IngestError(
+                f"date_format=MDY was requested but {_ex(force_dmy[0])} has "
+                "a month field > 12 under that rule. Check the export.")
+        rule = date_format
+        name = ("day-first (DD/MM/YYYY)" if rule == "DMY"
+                else "month-first (MM/DD/YYYY)")
+        warnings.append(
+            f"{n_slash} slash-style dates parsed as {name} - explicit "
+            f"date_format={rule}, applied to every row (UTC).")
+        return rule
+    if force_dmy:
+        warnings.append(
+            f"{n_slash} slash-style dates parsed as day-first (DD/MM/YYYY): "
+            f"{len(force_dmy)} value(s) such as {_ex(force_dmy[0])} have a "
+            "first field > 12, so day-first is the only consistent rule; "
+            "applied to every row (UTC).")
+        return "DMY"
+    if force_mdy:
+        warnings.append(
+            f"{n_slash} slash-style dates parsed as month-first (MM/DD/YYYY): "
+            f"{len(force_mdy)} value(s) such as {_ex(force_mdy[0])} have a "
+            "second field > 12, so month-first is the only consistent rule; "
+            "applied to every row (UTC).")
+        return "MDY"
+    raise IngestError(
+        f"Slash-style dates are ambiguous: every one of the {n_slash} values "
+        f"(e.g. {_ex(fields[0])}) has both fields <= 12, so it could be "
+        "day/month or month/day and the judge will not guess. Re-export with "
+        "ISO dates (2026-02-03 04:00, UTC) or unix epoch timestamps, or state "
+        "the format explicitly: --date-format DMY|MDY on the CLI, the date "
+        "format selector in the web app.")
+
+
 def _parse_time_col(raw: pd.Series, col: str,
-                    warnings: list[str]) -> pd.Series:
-    """Datetime strings via the mixed parser; all-numeric columns as unix
-    epoch with the unit inferred from magnitude (noted in the report)."""
+                    warnings: list[str], rule: str | None = None) -> pd.Series:
+    """Datetime strings via the mixed parser under ONE day/month rule for the
+    file; all-numeric columns as unix epoch with the unit inferred from
+    magnitude (noted in the report)."""
     num = pd.to_numeric(raw, errors="coerce")
     if num.notna().all():
         v = float(num.abs().median())
@@ -81,7 +169,35 @@ def _parse_time_col(raw: pd.Series, col: str,
             f"range (seconds ~1.7e9, milliseconds ~1.7e12, micro ~1.7e15, "
             f"nano ~1.7e18). Use ISO datetimes like 2026-01-05 10:00 (UTC) "
             f"or unix epoch timestamps.")
-    return pd.to_datetime(raw, errors="coerce", utc=True, format="mixed")
+    # dayfirst=True makes dateutil swap day and month even in an ISO string
+    # (2026-02-03 -> 2 March), so the rule is applied to slash-style values
+    # ONLY; everything else is parsed with the default (ISO-safe) parser.
+    slash = raw.astype(str).str.match(_SLASH_DATE.pattern)
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore")        # dateutil dayfirst chatter
+        parsed = pd.to_datetime(raw.where(~slash), errors="coerce", utc=True,
+                                format="mixed")
+        if slash.any():
+            by_rule = pd.to_datetime(raw.where(slash), errors="coerce",
+                                     utc=True, format="mixed",
+                                     dayfirst=(rule == "DMY"))
+            parsed = parsed.where(~slash, by_rule)
+    # The rule is a contract, not a hint: verify every slash-style value
+    # came out under it.  A parser that quietly used the other convention
+    # for one row would otherwise produce exactly the two-rules-in-one-file
+    # defect this guard exists to prevent.
+    for a, b, row, v in _slash_fields(raw):
+        ts = parsed.loc[row]
+        if pd.isna(ts):
+            continue
+        day, month = (a, b) if rule == "DMY" else (b, a)
+        if rule is None or ts.day != day or ts.month != month:
+            raise IngestError(
+                f"'{v}' (row {row + 2}, column '{col}') did not parse under "
+                f"the file's {rule or 'unset'} date rule (got "
+                f"{ts:%Y-%m-%d}). Re-export with ISO dates "
+                "(2026-02-03 04:00, UTC) or unix epoch timestamps.")
+    return parsed
 
 
 def _find_col(cols: list[str], key: str) -> str | None:
@@ -102,8 +218,11 @@ def _norm_side(v) -> float:
 
 
 def load_trades(raw: bytes, filename: str = "log.csv",
-                symbol: str | None = None) -> tuple[pd.DataFrame, list[str]]:
-    """Returns (trades, warnings).  Raises IngestError on fatal problems."""
+                symbol: str | None = None,
+                date_format: str | None = None,
+                ) -> tuple[pd.DataFrame, list[str]]:
+    """Returns (trades, warnings).  Raises IngestError on fatal problems.
+    date_format: None (infer one rule, refuse if ambiguous) | "DMY" | "MDY"."""
     warnings: list[str] = []
 
     if len(raw) > MAX_BYTES:
@@ -166,8 +285,10 @@ def load_trades(raw: bytes, filename: str = "log.csv",
             f"{n_bad_side} rows have an unrecognized side value "
             f"(examples: {', '.join(ex)}). Use long/short, buy/sell or +1/-1.")
 
+    time_cols = {mapping[k]: df[mapping[k]] for k in ("entry_time", "exit_time")}
+    rule = _infer_day_month_rule(time_cols, date_format, warnings)
     for k in ("entry_time", "exit_time"):
-        parsed = _parse_time_col(df[mapping[k]], mapping[k], warnings)
+        parsed = _parse_time_col(df[mapping[k]], mapping[k], warnings, rule)
         bad = parsed.isna()
         if bad.any():
             rows = df.loc[bad, mapping[k]].astype(str).head(3).tolist()
