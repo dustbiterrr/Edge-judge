@@ -352,15 +352,30 @@ def load_trades(raw: bytes, filename: str = "log.csv",
         if (out[k] <= 0).any():
             raise IngestError(f"Some {k} values are zero or negative.")
 
-    have_px = out["entry_price"].notna() & out["exit_price"].notna()
-    if have_px.all():
-        pass
-    elif have_px.any():
-        warnings.append(f"{int((~have_px).sum())} rows lack prices — those "
-                        "will be reconstructed from market data.")
+    # Say exactly what is missing.  A column that is absent and a cell that
+    # is blank or non-numeric are different situations; a provided price is
+    # never overwritten, only the missing cell is reconstructed.
+    if mapping["entry_price"] is None and mapping["exit_price"] is None:
+        warnings.append("No price columns in the log — every entry and exit "
+                        "price will be reconstructed from market data (next "
+                        "1h bar open after each timestamp).")
     else:
-        warnings.append("No prices in the log — all entries/exits will be "
-                        "reconstructed from market data (next 1h bar open).")
+        for k in ("entry_price", "exit_price"):
+            if mapping[k] is None:
+                warnings.append(f"No {k} column — every {k} will be "
+                                "reconstructed from market data (next 1h bar "
+                                "open); the other side's prices are kept.")
+                continue
+            miss = out[k].isna()
+            if miss.any():
+                lines = [int(r) for r in out.loc[miss, "row"]]
+                shown = ", ".join(map(str, lines[:5]))
+                more = f", +{len(lines) - 5} more" if len(lines) > 5 else ""
+                warnings.append(
+                    f"{int(miss.sum())} of {len(out)} rows have a blank or "
+                    f"non-numeric {k} (CSV line{'s' if len(lines) != 1 else ''} "
+                    f"{shown}{more}) — only those cells are reconstructed "
+                    "from market data; every provided price is kept.")
 
     out = out.sort_values("entry_time").reset_index(drop=True)
     return out, warnings

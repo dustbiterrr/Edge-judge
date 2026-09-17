@@ -192,8 +192,14 @@ def main() -> int:
         print(f"  [done] {sym}")
 
     n_eval = len({r["symbol"] for r in rows})
+    partial = n_eval < len(SYMBOLS)
     print(f"\n  {n_eval}/{len(SYMBOLS)} symbols evaluated "
           f"({len(SYMBOLS) - n_eval} skipped: no local data)")
+    if partial:
+        print("  !! PARTIAL RUN: the campaign judged all 13 symbols over "
+              "H1-2026. Everything below is a dry run")
+        print("     of the same judge on the data present locally - NOT the "
+              "campaign verdict (that lives in results/).")
 
     res = pd.DataFrame(rows)
     if res.empty:
@@ -251,7 +257,11 @@ def main() -> int:
 
     # ── verdict ──────────────────────────────────────────────────────────────
     print("\n" + "=" * 96)
-    print("  VERDICT (pre-registered criteria, per H)")
+    if partial:
+        print(f"  DRY RUN on {n_eval}/{len(SYMBOLS)} symbols - criteria "
+              "applied for illustration; thresholds assume the full basket")
+    else:
+        print("  VERDICT (pre-registered criteria, per H)")
     print("=" * 96)
     confirmed_any = False
     for H in HS:
@@ -304,7 +314,12 @@ def main() -> int:
             print(f"    => H={H}: NOT confirmed")
 
     print("\n" + "=" * 96)
-    if confirmed_any:
+    if partial:
+        print(f"  PARTIAL RUN ({n_eval}/{len(SYMBOLS)} symbols, local window "
+              "only): not a verdict on S02. Fetch all 13 symbols for")
+        print("  the campaign window to reproduce the recorded result; the "
+              "campaign's own verdict is in results/ and the README.")
+    elif confirmed_any:
         print("  S02 VWAP-FADE: CONFIRMED under non-overlapping execution "
               "(see per-H detail above).")
     else:

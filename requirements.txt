@@ -1,9 +1,11 @@
-# Python >= 3.10 (PEP 604 unions in signatures)
-numpy>=1.26
-pandas>=2.0
-pyarrow>=14
-matplotlib>=3.8
-streamlit>=1.49
-pytest>=8          # offline unit tests only (tests/)
+# Python >= 3.10 (PEP 604 unions in signatures); verified on 3.13.14.
+# Pinned to the versions the release was tested against on a clean venv
+# (pandas 3 changed string/NaN semantics that the ingest code depends on).
+numpy==2.5.3
+pandas==3.0.5
+pyarrow==25.0.1
+matplotlib==3.11.2
+streamlit==1.64.0
+pytest==9.1.1      # offline unit tests only (tests/)
 # research probes only (scripts/appendix_c_statarb.py) additionally need:
 #   statsmodels
