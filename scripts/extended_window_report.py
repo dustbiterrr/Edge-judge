@@ -26,6 +26,7 @@ PRE-REGISTRATION (printed in the verdict header):
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -146,7 +147,7 @@ def run_probe(name: str, args: list[str]) -> str:
     print(f"\n  >>> running {name} ...")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / name)] + args,
                        capture_output=True, text=True, encoding="utf-8",
-                       cwd=ROOT, env={**__import__("os").environ,
+                       cwd=ROOT, env={**os.environ,
                                       "PYTHONIOENCODING": "utf-8"})
     tail = "\n".join((r.stdout or "").splitlines()[-6:])
     print(tail)
@@ -257,19 +258,23 @@ def main() -> int:
 
     tbl = data_table()
     if not (tbl["status"] == "ok").any():
-        print(f"\n  nothing evaluated: no bars under {DATA} for the basket. "
-              "Fetch first (python scripts/fetch_binance_native.py --symbol "
-              "ETHUSDT --months 6); only the data table above was written.")
+        print("\n  nothing evaluated: no bars under data/native/ for the "
+              "basket. Fetch first (python scripts/fetch_binance_native.py "
+              "--symbol ETHUSDT --months 6); only the data table above was "
+              "written.")
         return 2
     regime_split()
 
     print("\n" + "=" * 96)
     print("  STAGE 2 — ENGINES on the extended window (reused unchanged)")
     print("=" * 96)
-    run_probe("setup_probe.py", ["--out", str(RES / "setup_probe_full.csv")])
-    run_probe("appendix_b_probe.py", ["--outdir", str(RES)])
-    run_probe("s20_relative_value.py", ["--outdir", str(RES)])
-    run_probe("appendix_c_statarb.py", ["--outdir", str(RES)])
+    # the engines run with cwd=ROOT and echo the path they were given, so
+    # hand them one relative to ROOT - never the resolved absolute path
+    child = Path(os.path.relpath(RES, ROOT))
+    run_probe("setup_probe.py", ["--out", str(child / "setup_probe_full.csv")])
+    run_probe("appendix_b_probe.py", ["--outdir", str(child)])
+    run_probe("s20_relative_value.py", ["--outdir", str(child)])
+    run_probe("appendix_c_statarb.py", ["--outdir", str(child)])
 
     full = merge_full()
 
