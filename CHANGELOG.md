@@ -121,6 +121,9 @@ the web app - never silently as a pass.
   and printed a verdict on it. It now labels such a run PARTIAL RUN and
   prints no verdict; with no data it refuses and writes nothing.
   `tests/test_scripts_outdir.py` pins this for all seven scripts.
+- README's "Output of step 1" block is the CLI's output byte for byte,
+  progress lines and `report ->` line included, and
+  `test_selftest_regression.py` compares the two.
 - `requirements.txt` pins the versions the release was verified against
   (numpy 2.5.3, pandas 3.0.5, pyarrow 25.0.1, matplotlib 3.11.2,
   streamlit 1.64.0, pytest 9.1.1).

@@ -17,7 +17,7 @@ git clone https://github.com/dustbiterrr/edge-judge.git && cd edge-judge
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 1. the self-test: our own campaign log, judged - a real FAIL in ~10 s
+# 1. the self-test: our own campaign log, judged - a real FAIL in a few seconds
 python -m judge audit --log results/s02_trades_LINKUSDT_16.csv --symbol LINKUSDT --out out/report.md
 
 # 2. your log
@@ -33,18 +33,40 @@ Your CSV needs `symbol, side, entry_time, exit_time`; optionally
 app). **Include `signal_time`, the moment each decision was made.** Without
 it the look-ahead check is UNVERIFIABLE, and the verdict will say so.
 
-Expected output of step 1:
+Output of step 1, byte for byte, on a first run (the seven `fetching` lines
+are the archive months being downloaded; on later runs they are absent
+because the months are cached under `data/`):
 
 ```
+  .. resolving overlaps (one position per symbol at a time)
+  .. loading market data
+  .. fetching LINKUSDT 2026-01 (1/7)
+  .. fetching LINKUSDT 2026-02 (2/7)
+  .. fetching LINKUSDT 2026-03 (3/7)
+  .. fetching LINKUSDT 2026-04 (4/7)
+  .. fetching LINKUSDT 2026-05 (5/7)
+  .. fetching LINKUSDT 2026-06 (6/7)
+  .. fetching LINKUSDT 2026-07 (7/7)
+  .. pricing trades
+  .. check 1/6: sample size
+  .. check 2/6: fee survival
+  .. check 3/6: random-walk neutrality (1000 bootstraps)
+  .. check 4/6: stability across halves
+  .. check 5/6: regime robustness
+  .. check 6/6: look-ahead (signal vs entry timing)
 FAIL — 4 of 6 checks failed (C2 fee survival: -0.140%/trade).
   C1 PASS         Sample size                  118 trades
   C2 FAIL         Fee survival                 -0.140%/trade
-      costs re-computed at binance-taker 0.110% round trip on every trade; this does not validate the author's own cost assumptions ...
+      costs re-computed at binance-taker 0.110% round trip on every trade; this does not validate the author's own cost assumptions - the same log can flip C2 under a different profile, and slippage or funding are not modelled.
   C3 FAIL         Beats coin-flip              44.9th pctl
   C4 FAIL         Stability (half vs half)     -0.421% / +0.217%
   C5 FAIL         Regime robustness            1/3 regimes +
   C6 PASS         Look-ahead                   0/118 trades
+report -> out/report.md
 ```
+
+`tests/test_selftest_regression.py` compares this block with the CLI's
+actual output, so it cannot drift.
 
 Exit code 0 = PASS, 1 = FAIL, 2 = the judge could not run (a missing or
 unreadable log, a malformed CSV, no market data, a bad flag, an unwritable
