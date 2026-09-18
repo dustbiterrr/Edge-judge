@@ -61,7 +61,8 @@ PERP_RT = {"taker": 0.11, "maker": 0.04}     # % round trip, perp leg
 DEPLOY = 4.0 / 3.0                           # deployed capital per notional N
 MIN_EVENTS = 100
 BAR_YR = 8.0                                 # pre-registered: 8%/yr on deployed
-RES = Path("results")
+RES = Path("out")                 # results/ is the immutable evidence base
+EVIDENCE = Path("results")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +79,8 @@ def load_matrix(data_dir: Path) -> dict:
             continue
         df = pd.read_parquet(fp)[["open_time", "funding", "premium"]]
         frames[sym] = df.set_index("open_time")
+    if not frames:
+        return None
     grid = sorted(set().union(*[set(f.index) for f in frames.values()]))
     t = np.array(grid, dtype=np.int64)
     hour = (t // TF_MS) % 24
@@ -224,12 +227,21 @@ def sim_rotation(fund: pd.DataFrame, prem: pd.DataFrame, event: np.ndarray,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> int:
+    global RES
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", default="data/native")
     ap.add_argument("--spot-rt", type=float, default=0.20,
                     help="spot leg round-trip cost %% (default 0.20)")
+    ap.add_argument("--outdir", default=str(RES),
+                    help="where funding_probe_full.csv is written (default: "
+                         "out/). 'results' overwrites the campaign evidence "
+                         "base - full reproduction only.")
     args = ap.parse_args()
-    RES.mkdir(exist_ok=True)
+    RES = Path(args.outdir)
+    if RES.resolve() == EVIDENCE.resolve():
+        print("  !! --outdir results: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
 
     print("=" * 98)
     print("  FUNDING/BASIS CARRY PROBE — short perp + long spot, "
@@ -242,6 +254,11 @@ def main() -> int:
     print("=" * 98)
 
     M = load_matrix(Path(args.data_dir))
+    if M is None:
+        print(f"\n  nothing evaluated: no bars under {args.data_dir}/ for the "
+              "basket. Fetch first (python scripts/fetch_binance_native.py "
+              "--symbol ETHUSDT --months 6); nothing written.")
+        return 2
     t, event, fund, prem = M["t"], M["event"], M["fund"], M["prem"]
     n = len(t)
     mid = n // 2
@@ -322,6 +339,7 @@ def main() -> int:
             add_row(strat, "PORTFOLIO", half, agg)
 
     res = pd.DataFrame(rows)
+    RES.mkdir(parents=True, exist_ok=True)
     res.to_csv(RES / "funding_probe_full.csv", index=False,
                float_format="%.4f")
 

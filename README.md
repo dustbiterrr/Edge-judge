@@ -231,20 +231,25 @@ Implement it as a `bars -> {-1,0,+1}` function in `scripts/setup_library.py`,
 add it to the registry, fetch the basket (`python
 scripts/fetch_binance_native.py --symbol ETHUSDT --months 6`, per symbol),
 and let `scripts/setup_probe.py` run: it prints passes next to expected
-false passes. `python scripts/s02_nonoverlap_backtest.py` is the
-one-position-at-a-time judge in campaign form; it writes to `out/`, and on
-fewer than 13 symbols it labels its output a partial run, not a verdict.
-**Warning:** `--outdir results` regenerates the campaign trade logs *in
-place*; use it only for a full reproduction.
+false passes and writes its table to `out/setup_probe_full.csv`. On fewer
+than the campaign's 13 symbols x 2 timeframes it labels the output a
+partial run and prints no verdict. `python
+scripts/s02_nonoverlap_backtest.py` is the one-position-at-a-time judge in
+campaign form; it writes to `out/`, and on fewer than 13 symbols it labels
+its output a partial run, not a verdict. **Warning:** `--outdir results`
+(`--out results/setup_probe_full.csv` for the setup probe) regenerates the
+campaign CSVs *in place*; use it only for a full reproduction, and the
+script says so when you do.
 
 ## Repository layout
 
 `results/` is the campaign's evidence base and is treated as immutable:
-nothing in the quick start writes there - the judge and the S02 script write
-to `out/` (gitignored), so a clean clone stays clean. The research probes
-that regenerate campaign CSVs (`setup_probe`, `appendix_*`, `s20_*`,
-`funding_*`, `extended_window_report`) do write into `results/` by design -
-run them only for a full reproduction.
+nothing writes there unless told to by name. The judge and every research
+probe (`setup_probe`, `appendix_*`, `s20_*`, `funding_*`,
+`extended_window_report`, `s02_nonoverlap_backtest`) write to `out/`
+(gitignored) by default, so a clean clone stays clean; `--outdir results`
+regenerates the campaign CSVs in place and is for a full reproduction only.
+`tests/test_scripts_outdir.py` pins this.
 
 ```
 edge-judge/

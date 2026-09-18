@@ -21,8 +21,14 @@ CAVEAT (printed): entries overlap for H>1, so effective n is lower than
 counted and E[false] is an UNDERestimate — read passes conservatively.
 
 Usage:
-    python scripts/setup_probe.py
+    python scripts/setup_probe.py                                   # -> out/
     python scripts/setup_probe.py --symbols ETHUSDT,SOLUSDT --tfs 15m
+    python scripts/setup_probe.py --out results/setup_probe_full.csv  # full repro:
+        OVERWRITES the campaign evidence in results/ - needs all 13 symbols
+
+On fewer than the campaign's 13 symbols x 2 timeframes the output is labelled
+a PARTIAL RUN and no verdict is printed - the campaign's verdict lives in
+results/ and the README.
 """
 
 from __future__ import annotations
@@ -47,7 +53,11 @@ except (AttributeError, OSError):
 
 DEFAULT_SYMBOLS = ("ETHUSDT,SOLUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,NEARUSDT,"
                    "APTUSDT,ARBUSDT,OPUSDT,SUIUSDT,ADAUSDT,XRPUSDT,DOTUSDT")
+CAMPAIGN_TFS = ("15m", "1h")
+CAMPAIGN_CELLS = len(DEFAULT_SYMBOLS.split(",")) * len(CAMPAIGN_TFS)  # 26
 GROSS_PASS = PASS_NET + TAKER_RT      # net_OUT>0.22% <=> gross_OUT>0.33%
+OUT_DEFAULT = Path("out") / "setup_probe_full.csv"
+EVIDENCE = Path("results")            # the immutable campaign evidence base
 
 
 def phi(x: float) -> float:
@@ -86,7 +96,10 @@ def main() -> int:
     p.add_argument("--tfs", default="15m,1h")
     p.add_argument("--horizons", default="4,8,16")
     p.add_argument("--data-dir", default="data/native")
-    p.add_argument("--out", default="results/setup_probe_full.csv")
+    p.add_argument("--out", default=str(OUT_DEFAULT),
+                   help="where the per-cell table is written (default: "
+                        "out/). A path under results/ overwrites the "
+                        "campaign evidence base - full reproduction only.")
     p.add_argument("--split", type=float, default=0.5,
                    help="IN-half fraction (robustness: try 0.4 / 0.6)")
     args = p.parse_args()
@@ -94,6 +107,11 @@ def main() -> int:
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
     tfs = [t.strip() for t in args.tfs.split(",") if t.strip()]
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
+    outfp = Path(args.out)
+    if EVIDENCE.resolve() in outfp.resolve().parents:
+        print(f"  !! --out {args.out}: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
 
     print("=" * 100)
     print(f"  COMPOSITE-SETUP WALK-FORWARD PROBE — {len(symbols)} symbols x "
@@ -161,7 +179,14 @@ def main() -> int:
             print(f"  [done] {sym} {tf}  ({len(SETUPS)*len(horizons)} cells)")
 
     res = pd.DataFrame(rows)
-    outfp = Path(args.out)
+    if res.empty:
+        print(f"\n  nothing evaluated: no usable bars under {args.data_dir}/ "
+              "for the requested symbols. Fetch first "
+              "(python scripts/fetch_binance_native.py --symbol ETHUSDT "
+              "--months 6); nothing written.")
+        return 2
+    n_present = len({(r["symbol"], r["tf"]) for r in rows})
+    partial = n_present < CAMPAIGN_CELLS
     outfp.parent.mkdir(parents=True, exist_ok=True)
     res.to_csv(outfp, index=False, float_format="%.4f")
 
@@ -173,6 +198,12 @@ def main() -> int:
         print("  excluded from probe:")
         for e in excluded:
             print(f"    - {e}")
+    print(f"\n  {n_present}/{CAMPAIGN_CELLS} symbol x timeframe pairs evaluated")
+    if partial:
+        print("  !! PARTIAL RUN: the campaign judged 13 symbols x 2 timeframes "
+              "over H1-2026. Everything below is a dry run")
+        print("     of the same judge on the data present locally - NOT the "
+              "campaign verdict (that lives in results/).")
 
     ev = res[res["status"].isin(["PASS", "marginal", "dead"])]
     passed = res[res["status"] == "PASS"].sort_values("net_out", ascending=False)
@@ -223,11 +254,23 @@ def main() -> int:
 
     # ── final verdict paragraph ──────────────────────────────────────────────
     print("\n" + "=" * 100)
-    print("  VERDICT")
+    if partial:
+        print(f"  DRY RUN on {n_present}/{CAMPAIGN_CELLS} symbol x timeframe "
+              "pairs - criteria applied for illustration; the false-pass "
+              "expectation assumes the full basket")
+    else:
+        print("  VERDICT")
     print("=" * 100)
     print(f"  {len(passed)} cell(s) passed the pre-registered threshold "
           f"against ~{e_false:.2f} expected false passes under zero edge.")
-    if len(passed) == 0:
+    if partial:
+        print(f"  -> PARTIAL RUN ({n_present}/{CAMPAIGN_CELLS} symbol x "
+              "timeframe pairs, local data only): not a verdict on the setup "
+              "library.")
+        print("     Fetch all 13 symbols for the campaign window to reproduce "
+              "the recorded result; the campaign's own")
+        print("     verdict is in results/ and the README.")
+    elif len(passed) == 0:
         print("  -> No composite setup carries a fee-clearing directional "
               "edge on this basket under the")
         print("     pre-registered judge. Same verdict as the generic probe "

@@ -35,6 +35,7 @@ cumulative E[false] over all ~1200 prior cells + Appendix C printed.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from itertools import combinations
 from math import erf, sqrt
@@ -79,7 +80,8 @@ PAIR_COST = 2 * FEE_RT              # 0.22%: both legs round-tripped
 # carry the per-trade sigma needed to recompute it.
 PRIOR_CELLS, PRIOR_EFALSE = 1201, 1.40
 DATA = Path("data/native")
-RES = Path("results")
+RES = Path("out")                 # results/ is the immutable evidence base
+EVIDENCE = Path("results")
 
 
 def phi(x: float) -> float:
@@ -287,10 +289,21 @@ def _status(si, so, bar, guard, control=False):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> int:
+    global RES
+    ap = argparse.ArgumentParser(prog="appendix_c_statarb")
+    ap.add_argument("--outdir", default=str(RES),
+                    help="where appendix_c_full.csv is written (default: "
+                         "out/). 'results' overwrites the campaign evidence "
+                         "base - full reproduction only.")
+    args = ap.parse_args()
+    RES = Path(args.outdir)
     if sm is None:
         print("[fatal] statsmodels not available (needed for S22 ADF).")
         return 2
-    RES.mkdir(exist_ok=True)
+    if RES.resolve() == EVIDENCE.resolve():
+        print("  !! --outdir results: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
     print("=" * 100)
     print("  APPENDIX C — structurally NEW classes only (Appendix B finality "
           "holds for single-asset directional)")
@@ -318,6 +331,12 @@ def main() -> int:
 
     res = pd.DataFrame([{k: v for k, v in r.items() if k != "_net_out_arr"}
                         for r in rows])
+    if res.empty:
+        print("\n  nothing evaluated: no bars under data/native/ for the "
+              "basket. Fetch first (python scripts/fetch_binance_native.py "
+              "--symbol ETHUSDT --months 6); nothing written.")
+        return 2
+    RES.mkdir(parents=True, exist_ok=True)
     res.to_csv(RES / "appendix_c_full.csv", index=False, float_format="%.4f")
 
     # cumulative false-pass ledger over EVALUABLE cells

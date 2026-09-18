@@ -6,8 +6,13 @@ Reuses the existing engines unchanged (setup_probe, appendix_b_probe,
 s20_relative_value, appendix_c_statarb) — this script only (1) prints the
 heterogeneous data table, (2) characterizes the IN/OUT regime split, (3)
 orchestrates the probes on the now-longer window, (4) merges their result
-CSVs into results/extended_window_full.csv, and (5) prints a class verdict
+CSVs into <outdir>/extended_window_full.csv, and (5) prints a class verdict
 against the SAME pre-registered thresholds as the 6-month campaign.
+
+Usage:
+    python scripts/extended_window_report.py                   # -> out/
+    python scripts/extended_window_report.py --outdir results  # full repro:
+        OVERWRITES the campaign evidence in results/ - needs all 13 symbols
 
 PRE-REGISTRATION (printed in the verdict header):
   * directional (S01-S19): death CONFIRMS harder (tighter CI around -fee),
@@ -20,6 +25,7 @@ PRE-REGISTRATION (printed in the verdict header):
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -29,7 +35,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "native"
-RES = ROOT / "results"
+RES = Path("out")                 # results/ is the immutable evidence base
+EVIDENCE = Path("results")
 SYMBOLS = ["ETHUSDT", "SOLUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT",
            "NEARUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "SUIUSDT",
            "ADAUSDT", "XRPUSDT", "DOTUSDT"]
@@ -76,7 +83,8 @@ def data_table() -> pd.DataFrame:
                          "gaps_pct": round(gaps, 2), "status": status})
     tbl = pd.DataFrame(rows)
     tbl.to_csv(RES / "extended_window_data_table.csv", index=False)
-    spans = tbl[tbl.status == "ok"]["months"]
+    spans = (tbl.loc[tbl.status == "ok", "months"] if "months" in tbl.columns
+             else pd.Series(dtype=float))
     if len(spans):
         print(f"\n  window span: {spans.min():.1f}-{spans.max():.1f} months "
               f"(heterogeneous — later listings shorter, kept at true length)")
@@ -142,7 +150,7 @@ def run_probe(name: str, args: list[str]) -> str:
                                       "PYTHONIOENCODING": "utf-8"})
     tail = "\n".join((r.stdout or "").splitlines()[-6:])
     print(tail)
-    if r.returncode not in (0, 1):
+    if r.returncode not in (0, 1, 2):     # 2 = nothing evaluated (no data)
         print(f"  [warn] {name} exit {r.returncode}\n{(r.stderr or '')[-500:]}")
     return r.stdout or ""
 
@@ -222,7 +230,19 @@ def structural_verdict(full: pd.DataFrame) -> None:
 
 
 def main() -> int:
-    RES.mkdir(exist_ok=True)
+    global RES
+    ap = argparse.ArgumentParser(prog="extended_window_report")
+    ap.add_argument("--outdir", default=str(RES),
+                    help="where the probes' CSVs and the merged table are "
+                         "written (default: out/). 'results' overwrites the "
+                         "campaign evidence base - full reproduction only.")
+    args = ap.parse_args()
+    RES = Path(args.outdir).resolve()     # absolute: the probes run with cwd=ROOT
+    RES.mkdir(parents=True, exist_ok=True)
+    if RES == EVIDENCE.resolve():
+        print("  !! --outdir results: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
     print("#" * 96)
     print("#  EXTENDED-WINDOW RE-RUN — PRE-REGISTRATION")
     print("#  directional S01-S19: death CONFIRMS harder (tighter CI @ -fee), "
@@ -234,16 +254,21 @@ def main() -> int:
     print("#  not edge — needs confirmation on untouched data.")
     print("#" * 96 + "\n")
 
-    data_table()
+    tbl = data_table()
+    if not (tbl["status"] == "ok").any():
+        print(f"\n  nothing evaluated: no bars under {DATA} for the basket. "
+              "Fetch first (python scripts/fetch_binance_native.py --symbol "
+              "ETHUSDT --months 6); only the data table above was written.")
+        return 2
     regime_split()
 
     print("\n" + "=" * 96)
     print("  STAGE 2 — ENGINES on the extended window (reused unchanged)")
     print("=" * 96)
-    run_probe("setup_probe.py", [])
-    run_probe("appendix_b_probe.py", [])
-    run_probe("s20_relative_value.py", [])
-    run_probe("appendix_c_statarb.py", [])
+    run_probe("setup_probe.py", ["--out", str(RES / "setup_probe_full.csv")])
+    run_probe("appendix_b_probe.py", ["--outdir", str(RES)])
+    run_probe("s20_relative_value.py", ["--outdir", str(RES)])
+    run_probe("appendix_c_statarb.py", ["--outdir", str(RES)])
 
     full = merge_full()
 

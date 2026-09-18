@@ -29,6 +29,7 @@ fewer comparisons make the final wave stricter.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from math import erf, sqrt
 from pathlib import Path
@@ -50,7 +51,8 @@ SYMBOLS = ["ETHUSDT", "SOLUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT",
            "ADAUSDT", "XRPUSDT", "DOTUSDT"]
 PASS_NET = 0.22
 FEE_RT = 0.11
-RES = Path("results")
+RES = Path("out")                 # results/ is the immutable evidence base
+EVIDENCE = Path("results")
 
 # setup -> (tf, [(H_label, H_eff)], min_n_out)
 # S14: exit close(T+1+H) puts the exit H bars past the snapshot bar -> H_eff=H+1
@@ -81,7 +83,18 @@ def phi(x: float) -> float:
 
 
 def main() -> int:
-    RES.mkdir(exist_ok=True)
+    global RES
+    ap = argparse.ArgumentParser(prog="appendix_b_probe")
+    ap.add_argument("--outdir", default=str(RES),
+                    help="where appendix_b_full.csv is written (default: "
+                         "out/). 'results' overwrites the campaign evidence "
+                         "base - full reproduction only.")
+    args = ap.parse_args()
+    RES = Path(args.outdir)
+    if RES.resolve() == EVIDENCE.resolve():
+        print("  !! --outdir results: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
     print("=" * 100)
     print("  APPENDIX B — PRE-REGISTERED FINAL WAVE of single-asset setups "
           "(S14-S19), non-overlapping judge")
@@ -141,6 +154,12 @@ def main() -> int:
         print(f"  [done] {setup} ({tf})")
 
     res = pd.DataFrame(rows)
+    if res.empty:
+        print("\n  nothing evaluated: no bars under data/native/ for the "
+              "basket. Fetch first (python scripts/fetch_binance_native.py "
+              "--symbol ETHUSDT --months 6); nothing written.")
+        return 2
+    RES.mkdir(parents=True, exist_ok=True)
     res.to_csv(RES / "appendix_b_full.csv", index=False, float_format="%.4f")
 
     # ── summary ──────────────────────────────────────────────────────────────

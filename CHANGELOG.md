@@ -92,6 +92,14 @@ the web app - never silently as a pass.
   cited; `tests/` is what the repository can prove about itself.
 - `s02_nonoverlap_backtest.py` labels a run on fewer than 13 symbols a
   partial run, not a verdict.
+- Every research probe writes to `out/` by default; `results/` is written
+  only with an explicit `--outdir results` (`--out results/...` for
+  `setup_probe.py`), and the script names the overwrite when it happens.
+  Before: `setup_probe.py` run as the README described - one symbol
+  fetched - replaced the 780-row campaign table with a 78-row partial run
+  and printed a verdict on it. It now labels such a run PARTIAL RUN and
+  prints no verdict; with no data it refuses and writes nothing.
+  `tests/test_scripts_outdir.py` pins this for all seven scripts.
 - `requirements.txt` pins the versions the release was verified against
   (numpy 2.5.3, pandas 3.0.5, pyarrow 25.0.1, matplotlib 3.11.2,
   streamlit 1.64.0, pytest 9.1.1).

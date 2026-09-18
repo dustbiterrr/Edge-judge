@@ -28,6 +28,7 @@ HONEST NOTE (printed): 6 months of daily rebalances is a SMALL sample
 
 from __future__ import annotations
 
+import argparse
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +49,8 @@ RT = 0.11                 # % round trip per leg swap
 HALF_RT = 0.055
 PASS_CYCLE = 0.44         # % net per pair-cycle, pre-registered
 MIN_CYCLES = 50
-RES = Path("results")
+RES = Path("out")                 # results/ is the immutable evidence base
+EVIDENCE = Path("results")
 
 
 def load() -> dict:
@@ -135,7 +137,26 @@ def run_config(t, O, sigdf, k: int, mid: int) -> pd.DataFrame:
 
 
 def main() -> int:
-    RES.mkdir(exist_ok=True)
+    global RES
+    ap = argparse.ArgumentParser(prog="s20_relative_value")
+    ap.add_argument("--outdir", default=str(RES),
+                    help="where s20_*.csv are written (default: out/). "
+                         "'results' overwrites the campaign evidence base - "
+                         "full reproduction only.")
+    args = ap.parse_args()
+    RES = Path(args.outdir)
+    if RES.resolve() == EVIDENCE.resolve():
+        print("  !! --outdir results: OVERWRITING the campaign evidence base. "
+              "Only meaningful with all 13 symbols fetched for the campaign "
+              "window.")
+    missing = [s for s in SYMBOLS
+               if not Path(f"data/native/{s}/1h/bars.parquet").is_file()]
+    if missing:
+        print("  nothing evaluated: S20 is cross-sectional and needs all 13 "
+              f"symbols; missing data/native/<SYM>/1h/bars.parquet for "
+              f"{', '.join(missing)}. Nothing written.")
+        return 2
+    RES.mkdir(parents=True, exist_ok=True)
     print("=" * 96)
     print("  S20 RELATIVE VALUE — cross-sectional dollar-neutral, separate "
           "pre-registered protocol")
@@ -226,8 +247,8 @@ def main() -> int:
     else:
         print("  => Survivor(s) above are PRELIMINARY (small sample) — "
               "require a longer window before any capital.")
-    print("\n  cycles -> results/s20_cycles_<config>.csv   summary -> "
-          "results/s20_summary.csv   equity -> results/s20_equity.csv")
+    print(f"\n  cycles -> {RES}/s20_cycles_<config>.csv   summary -> "
+          f"{RES}/s20_summary.csv   equity -> {RES}/s20_equity.csv")
     return 0
 
 
