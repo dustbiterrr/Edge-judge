@@ -269,7 +269,8 @@ def audit(trades: pd.DataFrame, fee_rt: float,
         i = int(np.flatnonzero(bad)[0])
         raise IngestError(
             f"{int(bad.sum())} trade{'s' if bad.sum() != 1 else ''} "
-            f"({_name_rows(_rows(tr, bad))}) have a return that is not a "
+            f"({_name_rows(_rows(tr, bad))}) "
+            f"{'have' if bad.sum() != 1 else 'has'} a return that is not a "
             f"finite number - the exit/entry price ratio overflows (e.g. "
             f"entry {ep[i]:g}, exit {xp[i]:g}). No verdict is computed on "
             "such a log; check the price columns of those rows.")
