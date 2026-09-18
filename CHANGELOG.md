@@ -42,6 +42,19 @@ the web app - never silently as a pass.
   cost assumptions". Behaviour unchanged: the same log still flips
   between FAIL and PASS when the profile changes, and now says so.
 
+### CLI
+
+- **A user error is one line, never a traceback.** `--log` on a file
+  that does not exist, on a directory, on an unreadable file, on an empty
+  file, on an `.xlsx` renamed to `.csv`; a bad `--fees`; an `--out` that
+  is a directory or cannot be created - each prints one line starting
+  with `ERROR:`, names only the path as typed, and exits 2. Before: a
+  missing `--log` produced a `FileNotFoundError` traceback with the
+  absolute path of the clone and exited 1, the code of a FAIL verdict.
+  Exit codes are now a contract: 0 PASS, 1 FAIL, 2 could not run. A bad
+  `--out` is caught before any market data is fetched. An unexpected
+  exception is also one line; `JUDGE_DEBUG=1` shows the traceback.
+
 ### Ingest
 
 - **One day/month rule per file.** Slash-style dates (`03/02/2026`) were

@@ -8,7 +8,7 @@ import pytest
 
 from conftest import trade_log
 from judge import FEE_PROFILES
-from judge.__main__ import parse_fees
+from judge.__main__ import CliError, parse_fees
 from judge.checks import audit
 from judge.ingest import load_trades
 
@@ -26,7 +26,9 @@ def test_bps_per_side_converts_to_round_trip_percent():
 
 @pytest.mark.parametrize("bad", ["abc", "0", "-1", "nan", "inf", ""])
 def test_invalid_fee_values_exit_with_a_message(bad):
-    with pytest.raises(SystemExit):
+    """CliError: main() prints it as one ERROR: line and exits 2 (was a
+    bare SystemExit, which exited 1 - the same code as a FAIL verdict)."""
+    with pytest.raises(CliError, match="--fees must be"):
         parse_fees(bad)
 
 

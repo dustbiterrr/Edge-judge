@@ -240,8 +240,18 @@ def load_trades(raw: bytes, filename: str = "log.csv",
         raise IngestError(
             f"File is {len(raw) / 1e6:.1f} MB — the limit is 10 MB. "
             f"Export a shorter period or fewer columns.")
+    if not raw.strip():
+        raise IngestError("The file is empty (0 bytes of data). Export the "
+                          "trades again and retry.")
+    if raw[:4] == b"PK\x03\x04":
+        raise IngestError("This is a ZIP or Excel (.xlsx) archive, not a CSV. "
+                          "Export as CSV (comma-separated text) and retry.")
     try:
         df = pd.read_csv(io.BytesIO(raw))
+    except UnicodeDecodeError:
+        raise IngestError("This file is not UTF-8 text - a binary file, or a "
+                          "CSV in another encoding. Export as plain UTF-8 "
+                          "comma-separated text and retry.")
     except Exception as e:
         raise IngestError(f"Could not read this file as CSV ({type(e).__name__}). "
                           f"Export a plain comma-separated file and retry.")

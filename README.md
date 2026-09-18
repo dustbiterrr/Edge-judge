@@ -46,8 +46,11 @@ FAIL — 4 of 6 checks failed (C2 fee survival: -0.140%/trade).
   C6 PASS         Look-ahead                   0/118 trades
 ```
 
-Exit code 0 = PASS, 1 = FAIL. The markdown or HTML report has the same
-table, three charts, a plain-English "What this means", and Notes.
+Exit code 0 = PASS, 1 = FAIL, 2 = the judge could not run (a missing or
+unreadable log, a malformed CSV, no market data, a bad flag, an unwritable
+report) - one line starting with `ERROR:`, never a traceback. The markdown
+or HTML report has the same table, three charts, a plain-English "What this
+means", and Notes.
 
 ## The six checks
 
@@ -87,12 +90,13 @@ pass by silence.
 - **`0/118 trades`** (C6): none of the 118 entries was booked at or before its signal, or inside the signal's 1h bar. On FAIL the detail names the CSV lines and the worst case.
 - **Notes** always start with the fee line and list every judgement the judge made on your behalf: reconstructed prices, dropped rows, the date rule it applied.
 
-Malformed input gets a sentence, not a traceback: an empty file, a
-header-only file, a semicolon-delimited export, a UTF-8 BOM, binary garbage,
-a trade that exits before it enters, a side spelled `flat`, a non-USDT
-symbol, a future exit time, a date column that mixes day-first and
-month-first, a price cell that says `abc` - each is refused or flagged with
-a message that says what to fix. Slash-style dates (`03/02/2026`) are read
+Malformed input gets a sentence, not a traceback: a file that does not
+exist, a directory, an empty file, a header-only file, an `.xlsx` renamed to
+`.csv`, a semicolon-delimited export, a UTF-8 BOM, binary garbage, a trade
+that exits before it enters, a side spelled `flat`, a non-USDT symbol, a
+future exit time, a date column that mixes day-first and month-first, a
+price cell that says `abc` - each is refused or flagged with a message that
+says what to fix, and the message names only the path you typed. Slash-style dates (`03/02/2026`) are read
 under **one** day/month rule for the whole file, inferred only when a value
 forces it; an all-ambiguous file is refused unless you state the rule
 (`--date-format DMY|MDY`, or the selector in the web app).
