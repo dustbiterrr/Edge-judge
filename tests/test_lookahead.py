@@ -196,3 +196,35 @@ def test_a_bare_signal_column_is_not_taken_for_a_timestamp():
     raw[1:] = ["1," + r for r in raw[1:]]
     tr, _ = load_trades(("\n".join(raw) + "\n").encode())
     assert tr["signal_time"].isna().all()
+
+
+# ── the two README examples, pinned to the code and to the README text ──────
+
+S = pd.Timedelta(seconds=1)
+
+
+def test_readme_example_decision_0430_entry_0445_fails(offline_klines):
+    """Decision 04:30, entry 04:45: same 1h bar -> FAIL, named as such."""
+    tr, _ = load_trades(log(entry=lambda i, b: b + 45 * M,
+                            signal=lambda i, e: e - 15 * M))
+    c = c6(audit(tr, 0.11))
+    assert c.status == "FAIL" and "inside the signal's own 1h bar" in c.detail
+
+
+def test_readme_example_bar_boundary_one_second_apart(offline_klines):
+    """07:59:59 -> 08:00:00 passes (next bar); 08:29:59 -> 08:30:00 fails."""
+    tr, _ = load_trades(log(signal=lambda i, e: e - S))       # e = XX:00:00
+    assert c6(audit(tr, 0.11)).passed
+    tr, _ = load_trades(log(entry=lambda i, b: b + 30 * M,
+                            signal=lambda i, e: e - S))       # e = XX:30:00
+    c = c6(audit(tr, 0.11))
+    assert not c.passed and "inside the signal's own 1h bar" in c.detail
+
+
+def test_readme_states_both_examples():
+    from pathlib import Path
+    text = Path(__file__).resolve().parent.parent.joinpath("README.md") \
+        .read_text(encoding="utf-8")
+    assert "Decision at 04:30, entry at 04:45" in text
+    assert "Signal at 07:59:59, entry at 08:00:00" in text
+    assert "Signal at 08:29:59, entry at 08:30:00" in text
