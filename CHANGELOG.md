@@ -57,6 +57,14 @@ the web app - never silently as a pass.
 
 ### Ingest
 
+- **A price is a finite positive number, and a verdict never contains
+  nan or inf.** Zero, negative, infinite and denormal prices (`1e-320`
+  passed the old `<= 0` check) are refused by CSV line with the offending
+  values; a return that is not a finite number (the exit/entry ratio
+  overflowed) is refused by CSV line in checks instead of becoming
+  `C2 fee survival: +nan%/trade`; no chart is drawn on non-finite data
+  (the HTML report used to die in matplotlib on it); with zero or one
+  evaluable trade the empty half reads `n/a` / `no trades`, not `nan`.
 - **One day/month rule per file.** Slash-style dates (`03/02/2026`) were
   parsed per element: `03/02` became 2 March and `13/02` became 13
   February in the same column, silently. Now the rule is inferred once

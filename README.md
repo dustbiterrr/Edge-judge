@@ -95,8 +95,10 @@ exist, a directory, an empty file, a header-only file, an `.xlsx` renamed to
 `.csv`, a semicolon-delimited export, a UTF-8 BOM, binary garbage, a trade
 that exits before it enters, a side spelled `flat`, a non-USDT symbol, a
 future exit time, a date column that mixes day-first and month-first, a
-price cell that says `abc` - each is refused or flagged with a message that
-says what to fix, and the message names only the path you typed. Slash-style dates (`03/02/2026`) are read
+price cell that says `abc`, a price of `0`, `-100`, `inf` or `1e-320` - each
+is refused or flagged with a message that says what to fix, and the message
+names only the path you typed. A verdict never contains `nan` or `inf`: a
+return that is not a finite number is refused by CSV line, not judged. Slash-style dates (`03/02/2026`) are read
 under **one** day/month rule for the whole file, inferred only when a value
 forces it; an all-ambiguous file is refused unless you state the rule
 (`--date-format DMY|MDY`, or the selector in the web app).

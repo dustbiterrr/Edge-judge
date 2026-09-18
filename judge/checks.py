@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from judge.ingest import IngestError
 from judge.marketdata import TF_MS, drift_24h_at, ensure_klines, next_bar_open
 from judge.overlap import resolve_overlaps
 
@@ -117,6 +118,11 @@ def _name_rows(rows: list[int]) -> str:
     more = (f", +{len(rows) - MAX_ROWS_NAMED} more"
             if len(rows) > MAX_ROWS_NAMED else "")
     return f"CSV line{'s' if len(rows) != 1 else ''} {shown}{more}"
+
+
+def _pct(x: float, fmt: str = "+.3f") -> str:
+    """A key number is a number or the word for its absence - never nan."""
+    return f"{x:{fmt}}%" if np.isfinite(x) else "n/a"
 
 
 def check_lookahead(tr: pd.DataFrame) -> CheckResult:
@@ -253,7 +259,20 @@ def audit(trades: pd.DataFrame, fee_rt: float,
                         f"treat those trades' pricing as approximate.")
 
     side = tr["side"].to_numpy(dtype=float)
-    gross = side * (xp / ep - 1.0) * 100.0
+    with np.errstate(all="ignore"):
+        gross = side * (xp / ep - 1.0) * 100.0
+    # Refusal beats a guess: a return that is not a finite number (the
+    # exit/entry ratio overflowed) would turn every statistic below into
+    # nan or inf and still print as a verdict.  Name the rows and stop.
+    bad = ~np.isfinite(gross)
+    if bad.any():
+        i = int(np.flatnonzero(bad)[0])
+        raise IngestError(
+            f"{int(bad.sum())} trade{'s' if bad.sum() != 1 else ''} "
+            f"({_name_rows(_rows(tr, bad))}) have a return that is not a "
+            f"finite number - the exit/entry price ratio overflows (e.g. "
+            f"entry {ep[i]:g}, exit {xp[i]:g}). No verdict is computed on "
+            "such a log; check the price columns of those rows.")
     net = gross - fee_rt
     tr = tr.assign(gross_pct=gross, net_pct=net,
                    entry_px_used=ep, exit_px_used=xp)
@@ -273,8 +292,9 @@ def audit(trades: pd.DataFrame, fee_rt: float,
     mean_net = float(net.mean()) if n else float("nan")
     c2 = n > 0 and mean_net > 0
     checks.append(CheckResult(
-        "C2", "Fee survival", c2, f"{mean_net:+.3f}%/trade",
-        f"Mean net PnL {mean_net:+.3f}%/trade after a {fee_rt:.3f}% "
+        "C2", "Fee survival", c2,
+        f"{_pct(mean_net)}/trade" if n else "no trades",
+        f"Mean net PnL {_pct(mean_net)}/trade after a {fee_rt:.3f}% "
         f"round-trip fee [{fee_label or 'custom rate'}] (bar: > 0). The fee "
         "is re-applied to every trade at this rate; any PnL column in the "
         "log is ignored."))
@@ -302,8 +322,8 @@ def audit(trades: pd.DataFrame, fee_rt: float,
     c4 = (len(first) > 0 and len(second) > 0 and np.isfinite(m1)
           and np.isfinite(m2) and np.sign(m1) == np.sign(m2) and m2 > 0)
     checks.append(CheckResult(
-        "C4", "Stability (half vs half)", c4, f"{m1:+.3f}% / {m2:+.3f}%",
-        f"Mean net first half {m1:+.3f}%, second half {m2:+.3f}% "
+        "C4", "Stability (half vs half)", c4, f"{_pct(m1)} / {_pct(m2)}",
+        f"Mean net first half {_pct(m1)}, second half {_pct(m2)} "
         f"(bar: same sign, second half > 0). "
         + ("" if c4 else "A sign flip between halves is the signature of a "
                          "regime artifact, not an edge.")))

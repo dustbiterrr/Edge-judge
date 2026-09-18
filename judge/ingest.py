@@ -357,10 +357,26 @@ def load_trades(raw: bytes, filename: str = "log.csv",
         else:
             out[k] = np.nan
     # each provided price validates on its own — no gating on whether the
-    # OTHER price column exists
+    # OTHER price column exists.  A price is a finite positive number: zero,
+    # negative, inf and denormals (1e-320 passes "<= 0" and turns the
+    # exit/entry ratio into inf, then every statistic into nan) are refused
+    # by CSV line, not carried into a verdict.
     for k in ("entry_price", "exit_price"):
-        if (out[k] <= 0).any():
-            raise IngestError(f"Some {k} values are zero or negative.")
+        v = out[k]
+        bad = v.notna() & (~np.isfinite(v) | (v <= 0)
+                           | (v.abs() < np.finfo(float).tiny))
+        if bad.any():
+            lines = [int(r) for r in out.loc[bad, "row"]]
+            shown = ", ".join(map(str, lines[:5]))
+            more = f", +{len(lines) - 5} more" if len(lines) > 5 else ""
+            ex = df.loc[bad, mapping[k]].astype(str).unique()[:3]
+            raise IngestError(
+                f"{int(bad.sum())} {k} value{'s' if len(lines) != 1 else ''} "
+                f"cannot be a price (examples: {', '.join(ex)}; CSV line"
+                f"{'s' if len(lines) != 1 else ''} {shown}{more}). A price "
+                "must be a finite positive number - not zero, negative, "
+                "infinite or smaller than 1e-308. Fix the export, or blank "
+                "the cell to have it reconstructed from market data.")
 
     # Say exactly what is missing.  A column that is absent and a cell that
     # is blank or non-numeric are different situations; a provided price is

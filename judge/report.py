@@ -136,18 +136,31 @@ def _png(fig) -> bytes:
     return buf.getvalue()
 
 
-def _placeholder(title: str) -> bytes:
+NOT_FINITE = "not drawn: the data contain values that are not finite numbers"
+
+
+def _placeholder(title: str,
+                 msg: str = "no evaluable trades — nothing to chart") -> bytes:
     fig, ax = _fig((7, 2.2))
-    ax.text(0.5, 0.5, "no evaluable trades — nothing to chart",
-            ha="center", va="center", fontsize=11, color="#777")
+    ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11,
+            color="#777")
     ax.set_title(title)
     ax.set_axis_off()
     return _png(fig)
 
 
+def _finite(*arrays) -> bool:
+    """matplotlib raises on a nan/inf axis range; a chart is never worth a
+    traceback, so every chart checks its inputs and says so instead."""
+    return all(np.isfinite(np.asarray(a, dtype=float)).all() for a in arrays)
+
+
 def chart_bootstrap(res) -> bytes:
+    title = "C3 — does your direction beat a coin flip?"
     if res.trades is None or len(res.trades) == 0:
-        return _placeholder("C3 — does your direction beat a coin flip?")
+        return _placeholder(title)
+    if not _finite(res.bootstrap_totals, [res.client_total]):
+        return _placeholder(title, NOT_FINITE)
     fig, ax = _fig((7, 3.2))
     ax.hist(res.bootstrap_totals, bins=50, color="#8FA6B8",
             label="1000 coin-flip logs")
@@ -162,10 +175,13 @@ def chart_bootstrap(res) -> bytes:
 
 
 def chart_equity(res) -> bytes:
+    title = "C4 — equity, non-overlapping execution"
     if res.trades is None or len(res.trades) == 0:
-        return _placeholder("C4 — equity, non-overlapping execution")
+        return _placeholder(title)
     tr = res.trades.sort_values("exit_time")
     eq = tr["net_pct"].cumsum().values
+    if not _finite(eq, res.half_means):
+        return _placeholder(title, NOT_FINITE)
     t = tr["exit_time"].dt.tz_localize(None).values
     mid_time = (tr["entry_time"].min() + (tr["entry_time"].max()
                                           - tr["entry_time"].min()) / 2
@@ -184,9 +200,12 @@ def chart_equity(res) -> bytes:
 
 
 def chart_regimes(res) -> bytes:
+    title = "C5 — PnL by market regime (24h drift at entry)"
     rt = res.regime_table
     if rt is None or len(rt) == 0 or res.trades is None or len(res.trades) == 0:
-        return _placeholder("C5 — PnL by market regime (24h drift at entry)")
+        return _placeholder(title)
+    if not _finite(rt["sum"], res.trades["net_pct"]):
+        return _placeholder(title, NOT_FINITE)
     fig, ax = _fig((7, 3.0))
     order = [r for r in ("UP", "FLAT", "DOWN") if r in set(rt["regime"])]
     rt = rt.set_index("regime").loc[order].reset_index()
