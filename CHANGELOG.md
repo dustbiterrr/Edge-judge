@@ -127,8 +127,11 @@ the web app - never silently as a pass.
 - `requirements.txt` pins the versions the release was verified against
   (numpy 2.5.3, pandas 3.0.5, pyarrow 25.0.1, matplotlib 3.11.2,
   streamlit 1.64.0, pytest 9.1.1).
-- Tests: 87, offline. New: dates (16), C6 (16), C3/C4/C5 boundaries
-  (25), the self-test regression pinned to README, the labelled fake.
+- Tests: 144, offline. New: dates (16), C6 (19, with the README's two
+  timing examples), C3/C4/C5 boundaries (25), the self-test regression
+  pinned to README (including its output block), the labelled fake, the
+  CLI's error paths (19), non-finite prices and returns (19), and the
+  research probes' output discipline (15).
 
 ## 1.0.1 — 2026-07
 

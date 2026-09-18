@@ -197,8 +197,10 @@ real FAIL on a real strategy in seconds without uploading anything.
 What this repository can prove about itself is in `tests/` (`pytest -q
 tests`, offline, network disabled at the socket level): the fee arithmetic,
 date and timestamp ingest, overlap resolution, C3/C4/C5 boundary behaviour,
-all three C6 states, and the self-test regression. Behavioural changes are
-in [CHANGELOG.md](CHANGELOG.md).
+all three C6 states, the self-test regression and its output block above,
+that every user error is one `ERROR:` line, that no verdict ever contains
+`nan`, and that no script writes into `results/` unasked. Behavioural
+changes are in [CHANGELOG.md](CHANGELOG.md).
 
 v1.1.0 adds C6 look-ahead: `signal_time` must be strictly before
 `entry_time` and outside the signal's own 1h bar (entering at the open of a

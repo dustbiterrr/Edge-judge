@@ -238,6 +238,7 @@ def main() -> int:
                          "campaign evidence base - full reproduction only.")
     args = ap.parse_args()
     RES = Path(args.outdir).resolve()     # absolute: the probes run with cwd=ROOT
+    shown = Path(args.outdir)              # printed as typed, never resolved
     RES.mkdir(parents=True, exist_ok=True)
     if RES == EVIDENCE.resolve():
         print("  !! --outdir results: OVERWRITING the campaign evidence base. "
@@ -277,7 +278,7 @@ def main() -> int:
     print("=" * 96)
     directional_ci()
     structural_verdict(full)
-    print(f"\n  merged rows -> {RES / 'extended_window_full.csv'} "
+    print(f"\n  merged rows -> {shown / 'extended_window_full.csv'} "
           f"({len(full)} rows; one row per cell x half for S20, per cell "
           f"otherwise - cells are counted by scripts/count_cells.py)")
     print("  Any PASS on OUT above is a CANDIDATE, not an edge — confirm on "
