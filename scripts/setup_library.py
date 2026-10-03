@@ -271,8 +271,8 @@ _MS8H = 8 * 3_600_000
 _MS15M = 15 * 60_000
 
 
-def s14_funding_snapshot_frontrun(df, in_mask):
-    """Funding-snapshot front-run (15m; funding desks): on the bar opening
+def s14_funding_snapshot_fade(df, in_mask):
+    """Funding-snapshot fade (15m): on the bar opening
     30min before the 00/08/16 UTC snapshot, an extreme premium (IN q90/q10
     of pre-snapshot bars) marks crowded positioning about to pay/receive —
     fade it into and just past the payment."""
@@ -413,7 +413,7 @@ def s19_liquidity_cascade(df, in_mask):
 
 
 APPENDIX_B_SETUPS: dict[str, callable] = {
-    "S14 fund-snapshot": s14_funding_snapshot_frontrun,   # 15m only, H {2,4}
+    "S14 fund-snapshot": s14_funding_snapshot_fade,       # 15m only, H {2,4}
     "S15 coiled-spring": s15_coiled_spring_oi,
     "S16 cvd-exhaustion": s16_cvd_accel_exhaustion,
     "S17 toxic-flow": s17_toxic_flow_absorption,

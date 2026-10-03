@@ -88,7 +88,8 @@ PASS_VERIFIED = ("All six pre-registered checks passed. This does not "
                  "guarantee future profits, but the log shows a fee-surviving, "
                  "direction-informed, regime-robust pattern that a coin flip "
                  "does not explain, with entries timed after their signals. "
-                 "Forward-test with small size before trusting it.")
+                 "Treat it as a hypothesis to test on new data, not as a "
+                 "finding.")
 
 PASS_PARTIAL = ("The five statistical checks passed, but the one check that "
                 "would catch look-ahead could not run, so this is not a clean "
