@@ -130,9 +130,14 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="judge")
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("audit", help="audit a trade-log CSV")
-    a.add_argument("--log", required=True)
-    a.add_argument("--out", default="report.md")
-    a.add_argument("--fees", default="binance-taker")
+    a.add_argument("--log", required=True,
+                   help="trade-log CSV: symbol, side, entry_time, exit_time; "
+                        "optional signal_time, entry_price, exit_price, qty")
+    a.add_argument("--out", default="report.md",
+                   help="report path, .md or .html (default: report.md)")
+    a.add_argument("--fees", default="binance-taker",
+                   help="binance-taker (default), binance-maker, or a number "
+                        "of bps per side")
     a.add_argument("--symbol", default=None,
                    help="symbol if the CSV has no symbol column")
     a.add_argument("--date-format", default=None, choices=["DMY", "MDY"],

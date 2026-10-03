@@ -48,9 +48,10 @@ def run_pipeline(raw: bytes, filename: str, fee_rt: float,
             return None, (
                 "INSUFFICIENT — none of the trades could be priced against "
                 "available market data, so there is nothing to judge. Check "
-                "that entry/exit times are UTC, within the last 12 months, "
-                "and that the symbol traded on Binance USDT-perp futures in "
-                "that window.")
+                "that entry/exit times are UTC and that the symbol was trading "
+                "on Binance USDT-perp futures at those times (the public "
+                "archive covers each symbol from its listing, no earlier than "
+                "late 2019, up to yesterday).")
         return res, None
     except (IngestError, MarketDataError) as e:
         return None, str(e)
@@ -149,8 +150,8 @@ def main():
     st.set_page_config(page_title="EdgeJudge", page_icon="⚖️", layout="wide")
     st.markdown("<h1 style='font-family:ui-monospace,monospace'>EdgeJudge"
                 "</h1>", unsafe_allow_html=True)
-    st.write("Upload a trade log. Get a pre-registered verdict: does this "
-             "strategy show a real edge, or luck dressed up? "
+    st.write("Upload a trade log and get a pre-registered verdict on whether "
+             "its results hold up or are luck dressed up. "
              "We never run your code — only a CSV of your trades.")
 
     fee_rt, fee_label = fee_selector()
@@ -160,7 +161,7 @@ def main():
     with left:
         up = st.file_uploader(
             "Trade-log CSV — columns: symbol, side, entry_time, exit_time, "
-            "[entry_price, exit_price, qty]",
+            "[signal_time, entry_price, exit_price, qty]",
             type=["csv"])
         st.download_button("Download CSV template", TEMPLATE_CSV,
                            file_name="edgejudge_template.csv")

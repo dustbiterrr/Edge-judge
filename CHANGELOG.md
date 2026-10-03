@@ -5,6 +5,38 @@ itself. Criteria C1–C5 are frozen since v1.0; a version bump means the
 judge answers differently on some input, or the documentation stops
 saying something it could not back.
 
+## Unreleased (documentation and messages)
+
+Verdicts unchanged; criteria still v1.1.0.
+
+- README said the judge "re-prices your trades from public Binance data".
+  It recomputes each trade's return from the entry and exit prices in the
+  log and fills only a missing price from Binance data; the opening
+  paragraph now says that.
+- README and `requirements.txt` said Python 3.10+. The pinned numpy 2.5.3
+  needs 3.12+; the test suite passes on 3.12 and 3.13.
+- README no longer says the H1-2026 campaign was run "with an RL trading
+  system". It started from the diagnostics of an earlier private
+  machine-learning trading model; the setups it tested are rule-based.
+- Web app: the "none of the trades could be priced" message no longer says
+  trades must fall within the last 12 months (the archive covers each
+  symbol from its listing, no earlier than late 2019; the 12-month limit
+  applies to a log's span and is checked at ingest); the upload label
+  lists `signal_time`; the intro offers a verdict on whether a log's
+  results hold up instead of asking whether a strategy shows "a real
+  edge".
+- The text under a clean PASS ends "Treat it as a hypothesis to test on
+  new data, not as a finding." instead of suggesting a forward test with
+  small size.
+- `python -m judge audit --help` describes `--log`, `--out` and `--fees`.
+- Setup S14 is called a funding-snapshot fade in the README and in
+  `scripts/setup_library.py` (function renamed), which is what it does:
+  it fades an extreme premium before the scheduled funding snapshot.
+- `scripts/funding_carry_probe.py` prints its last summary line in
+  English.
+- README rule 6 says the repository was built with AI coding assistants,
+  which is why an agent's summary of a run never counts as its result.
+
 ## 1.1.0 — 2026-09
 
 **Principle: refusal beats a guess.** Where the judge cannot check

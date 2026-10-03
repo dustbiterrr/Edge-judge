@@ -1,6 +1,6 @@
 # edge-judge
 
-**EdgeJudge reads a CSV of your closed trades and returns one verdict: PASS or FAIL, with six pre-registered checks and the reason for each. It never runs your code; it re-prices your trades from public Binance data, re-applies the fee you name, and tests whether the result beats a coin flip, survives a time split and a regime split, and - when you give it decision times - whether you entered before you could have known. What it cannot check it says out loud, as UNVERIFIABLE, never as a pass.**
+**EdgeJudge reads a CSV of your closed trades and returns one verdict: PASS or FAIL, with six pre-registered checks and the reason for each. It never runs your code; it ignores the profit your log reports, recomputes every trade's return from its entry and exit prices (filling a missing price from public Binance data), re-applies the fee you name, and tests whether the result beats a coin flip, survives a time split and a regime split, and - when you give it decision times - whether you entered before you could have known. What it cannot check it says out loud, as UNVERIFIABLE, never as a pass.**
 
 Most backtests lie to their authors. This tool makes the common lies visible and names the ones it cannot see. It grew out of a six-month search for edge on Binance perpetual futures that found none; that campaign, and every number it produced, is documented at the bottom.
 
@@ -8,9 +8,9 @@ Most backtests lie to their authors. This tool makes the common lies visible and
 
 ## Five minutes to a verdict
 
-Python 3.10+; verified on 3.13. First runs download public archive dumps from
-data.binance.vision into `data/` (gitignored): the self-test below pulls
-about 0.25 MB.
+Python 3.12+ (the pinned numpy 2.5.3 requires it); verified on 3.12 and
+3.13. First runs download public archive dumps from data.binance.vision
+into `data/` (gitignored): the self-test below pulls about 0.25 MB.
 
 ```bash
 git clone https://github.com/dustbiterrr/edge-judge.git && cd edge-judge
@@ -211,9 +211,10 @@ mid-bar entries; C1-C5 are unchanged since v1.0.
 
 ## The campaign this grew out of (H1-2026)
 
-A six-month attempt to find directional edge on Binance perpetual futures
-with an RL trading system, at 1m to 1h bars, over 13 instruments. It found
-none, and in the process built the judging protocol above. What follows is
+A six-month attempt to find directional edge on Binance perpetual futures,
+at 1m to 1h bars, over 13 instruments, starting from the diagnostics of an
+earlier private machine-learning trading model. It found none, and in the
+process built the judging protocol above. What follows is
 the record: the rules, every stage with its verdict, and a re-run over 18
 months. Every number is one of two kinds. **✓** reproduces from `results/`
 with one command, `python scripts/campaign_numbers.py` (cell counts:
@@ -228,7 +229,7 @@ reproducible from this repository**; the script lists every one of them.
 3. **Count what a trader gets, not what a bar shows.** Dense signals are judged one-position-at-a-time. Per-bar expectancy on an overlapping signal measures episode shape, not tradable edge (our stretch episodes averaged 3.9 bars† - per-bar counting scored each ~4×, biased toward the deepest bars).
 4. **Account for luck.** Screening N cells means some pass by chance. Print expected false passes next to actual passes, always.
 5. **Confirm on untouched data.** Symbols/periods never seen during screening. Survivors of the grid died here - that is the system working.
-6. **Agent reports are text, artifacts are evidence.** Every run must leave CSVs and trade logs. We caught our own coding agent embellishing twice; the files didn't lie.
+6. **Agent reports are text, artifacts are evidence.** This repository was built with AI coding assistants, so every run must leave CSVs and trade logs; an agent's summary of a run is never taken as its result.
 
 ### What the judge caught
 
@@ -241,7 +242,7 @@ reproducible from this repository**; the script lists every one of them.
 | Confirmation (untouched symbols) ✓ | the 3 surviving setups on ADA/XRP/DOT | S01 and S08: no cell passes. S02 vwap-fade: OUT positive on 2 of 3 symbols (XRP marginal +0.05%, DOT +0.96% with IN −0.13%, a sign flip), no cell passes the bar. **Also on the untouched symbols: S04 liq-bounce passes on DOTUSDT at 15m H=8 and H=16** - a setup that did not survive screening, passing on confirmation data; by protocol that is screening on the confirmation set, not a confirmation, and it was not pursued. Earlier versions of this README did not mention it. |
 | **Non-overlap judge** ✓ | S02 vwap-fade, one-position-at-a-time | (a),(b),(c) PASS at both horizons - but **(d) FAIL: median IN −0.33%/trade vs OUT +0.33% (H=8); −0.32% vs +0.22% (H=16).** Sign flip between halves = regime artifact, not edge. Not tradable. |
 | Funding/basis carry ✓ | Structural premium beats costs | **No premium in window.** All three harvest strategies negative after costs on the OUT half at taker (S-A −0.8%, S-B −8.7%, S-C −56%/yr on deployed); the best single symbol is LINKUSDT at +2.3%/yr maker, +2.1% taker, against the pre-registered 8% bar. S-A on $10k deployed: **−$5 (maker) to −$7 (taker) per month.** Basket average funding ≈ 0 and 39–56% of payments negative are run-time prints†. Regime-dependent: monitored, not traded. |
-| Appendix B (pre-declared final wave) ✓ | 6 advanced setups (funding-frontrun, OI-spring, CVD-exhaustion, toxic-flow, FVG, liquidation-cascade) + cross-sectional relative value (S20) | Only **S14 reached tradable sample** → **dead, 0 of 14 evaluable cells (7 symbols × 2 H) net-positive**. The other five never reached the n-guard of 100 OUT trades: S17 produced zero signals at these bar sizes, S15/S19 at most 8/13, S18 at most 26, S16 at most 53 - the run-time diagnostic that called S16 "guard-blocked on a sign flip" is not in the CSV†. **S20: all four configs sign-flipped between halves** (momentum_k1 IN −0.30% → OUT +0.43%, flow_z_k1 IN +0.04% → OUT −0.30%). 0 confirmations. |
+| Appendix B (pre-declared final wave) ✓ | 6 advanced setups (funding-snapshot fade, OI-spring, CVD-exhaustion, toxic-flow, FVG, liquidation-cascade) + cross-sectional relative value (S20) | Only **S14 reached tradable sample** → **dead, 0 of 14 evaluable cells (7 symbols × 2 H) net-positive**. The other five never reached the n-guard of 100 OUT trades: S17 produced zero signals at these bar sizes, S15/S19 at most 8/13, S18 at most 26, S16 at most 53 - the run-time diagnostic that called S16 "guard-blocked on a sign flip" is not in the CSV†. **S20: all four configs sign-flipped between halves** (momentum_k1 IN −0.30% → OUT +0.43%, flow_z_k1 IN +0.04% → OUT −0.30%). 0 confirmations. |
 
 The non-overlap row is the whole point. The per-bar screen showed +0.63% on the best S02 cell†. Honest one-position execution plus one pre-registered criterion - *sign agreement between halves* - revealed the "edge" was April–July weather. That single line of protocol is the difference between a research note and a drawdown.
 

@@ -1,4 +1,4 @@
-# Python >= 3.10 (PEP 604 unions in signatures); verified on 3.13.14.
+# Python >= 3.12 (numpy 2.5.3 requires it); verified on 3.12 and 3.13.
 # Pinned to the versions the release was tested against on a clean venv
 # (pandas 3 changed string/NaN semantics that the ingest code depends on).
 numpy==2.5.3

@@ -406,8 +406,9 @@ def main() -> int:
     mm10 = 10_000 * bo_m["ann_dep_pct"] / 100 / 12
     lo, hi = sorted([min(mt1, mm1), max(mt1, mm1)])
     lo10, hi10 = sorted([min(mt10, mm10), max(mt10, mm10)])
-    print(f"  порядок дохода на капитале пользователя: "
-          f"${lo:.0f}-{hi:.0f}/мес на $1k, ${lo10:.0f}-{hi10:.0f}/мес на $10k")
+    print(f"  monthly result on deployed capital (maker/taker range): "
+          f"{lo:+.1f} to {hi:+.1f} $/mo per $1k, "
+          f"{lo10:+.0f} to {hi10:+.0f} $/mo per $10k")
     print(f"\n  full table -> {RES / 'funding_probe_full.csv'}")
     return 0
 
